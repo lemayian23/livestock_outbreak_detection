@@ -1,0 +1,25 @@
+app:
+  name: "Livestock Outbreak Detection MVP"
+  version: "1.0.0"
+  offline_mode: true
+
+database:
+  path: "./data/livestock.db"
+  type: "sqlite"
+
+anomaly_detection:
+  method: "statistical"  # Options: statistical, isolation_forest, lstm
+  threshold: 3.0  # Z-score threshold
+  window_size: 7  # Days for rolling window
+  min_anomalies_for_alert: 3
+
+livestock_metrics:
+  normal_ranges:
+    temperature:
+      cattle: [38.0, 39.0]  # Celsius
+      sheep: [38.5, 40.0]
+      goat: [38.5, 40.5]
+    heart_rate:
+      cattle: [48, 84]  # BPM
+      sheep: [70, 80]
+    activity_level: [0.5, 1.5]  # Relative to baseline
