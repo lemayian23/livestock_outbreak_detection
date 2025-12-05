@@ -8,11 +8,14 @@ from typing import Dict, List, Tuple, Optional
 from enum import Enum
 
 from .statistical import StatisticalDetector
+from .isolation_forest import IsolationForestDetector
+from .ensemble import EnsembleDetector
 from src.utils.config import Config
 
 class DetectionMethod(Enum):
     STATISTICAL = "statistical"
     ISOLATION_FOREST = "isolation_forest"
+    ENSEMBLE = "ensemble"
     LSTM = "lstm"
 
 class AnomalyDetector:
@@ -33,10 +36,24 @@ class AnomalyDetector:
                 threshold=self.config.anomaly_config.threshold
             )
         elif method == DetectionMethod.ISOLATION_FOREST.value:
-            # Placeholder for Isolation Forest implementation
-            from .isolation_forest import IsolationForestDetector
             self.detector = IsolationForestDetector(
-                contamination=0.1
+                contamination=self.config.isolation_forest.get('contamination', 0.1),
+                n_estimators=self.config.isolation_forest.get('n_estimators', 100),
+                random_state=self.config.isolation_forest.get('random_state', 42)
+            )
+        elif method == DetectionMethod.ENSEMBLE.value:
+            self.detector = EnsembleDetector(
+                statistical_config={
+                    'window_size': self.config.anomaly_config.window_size,
+                    'threshold': self.config.anomaly_config.threshold
+                },
+                isolation_forest_config={
+                    'contamination': self.config.isolation_forest.get('contamination', 0.1),
+                    'n_estimators': self.config.isolation_forest.get('n_estimators', 100),
+                    'random_state': self.config.isolation_forest.get('random_state', 42)
+                },
+                weights=self.config.anomaly_config.get('ensemble_weights', 
+                                                      {'statistical': 0.4, 'isolation_forest': 0.6})
             )
         elif method == DetectionMethod.LSTM.value:
             # Placeholder for LSTM implementation
@@ -133,25 +150,13 @@ class AnomalyDetector:
                         'avg_anomaly_score': group['anomaly_score'].mean(),
                         'animal_types': group['animal_type'].unique().tolist() 
                                       if 'animal_type' in group.columns else [],
-                        'metrics_affected': self._identify_affected_metrics(group)
+                        'detection_method': self.config.anomaly_config.method
                     }
+                    
+                    # Add feature contributions if available
+                    if hasattr(self.detector, 'feature_cols') and self.detector.feature_cols:
+                        cluster['features_contributing'] = self.detector.feature_cols[:3]
+                    
                     clusters.append(cluster)
         
         return clusters
-    
-    def _identify_affected_metrics(self, anomaly_group: pd.DataFrame) -> List[str]:
-        """Identify which metrics are affected in anomaly group"""
-        metrics = ['temperature', 'heart_rate', 'activity_level']
-        affected = []
-        
-        for metric in metrics:
-            anomaly_col = f'{metric}_anomaly'
-            if anomaly_col in anomaly_group.columns and anomaly_group[anomaly_col].any():
-                affected.append(metric)
-            elif metric in anomaly_group.columns:
-                # Check if values are outside normal range
-                if 'animal_type' in anomaly_group.columns:
-                    # This would need config-based range checking
-                    affected.append(metric)
-        
-        return affected
