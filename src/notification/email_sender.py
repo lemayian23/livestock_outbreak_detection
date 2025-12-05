@@ -234,4 +234,145 @@ class EmailAlertSender:
         
         msg.attach(part)
     
-    def _send_email(self, msg: MIMEMultipart) ->
+    def _send_email(self, msg: MIMEMultipart) -> bool:
+        """
+        Send email via SMTP
+        
+        Args:
+            msg: Email message
+            
+        Returns:
+            True if sent successfully
+        """
+        try:
+            # Connect to SMTP server
+            if self.config.get('use_tls', True):
+                server = smtplib.SMTP(self.config['smtp_server'], self.config['smtp_port'])
+                server.starttls()
+            else:
+                server = smtplib.SMTP_SSL(self.config['smtp_server'], self.config['smtp_port'])
+            
+            # Login if credentials provided
+            password = self.config.get('sender_password')
+            if password:
+                server.login(self.config['sender_email'], password)
+            
+            # Send email
+            server.send_message(msg)
+            server.quit()
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"SMTP error: {str(e)}")
+            return False
+    
+    def send_daily_report(self, 
+                         report_data: Dict,
+                         report_file: str = None) -> bool:
+        """
+        Send daily summary report
+        
+        Args:
+            report_data: Report data dictionary
+            report_file: Path to report file to attach
+            
+        Returns:
+            True if email sent successfully
+        """
+        if not self.enabled:
+            return False
+        
+        # Generate report subject
+        date_str = datetime.now().strftime('%Y-%m-%d')
+        subject = f"Daily Livestock Health Report - {date_str}"
+        
+        # Generate report body
+        body = self._generate_daily_report_body(report_data)
+        
+        # Attachments
+        attachments = []
+        if report_file and os.path.exists(report_file):
+            attachments.append(report_file)
+        
+        # Send email
+        return self.send_alert(
+            alert_data={'severity': 'info', 'farm_id': 'ALL'},
+            attachments=attachments,
+            custom_subject=subject,
+            custom_body=body
+        )
+    
+    def _generate_daily_report_body(self, report_data: Dict) -> str:
+        """
+        Generate daily report body
+        
+        Args:
+            report_data: Report data
+            
+        Returns:
+            Report body text
+        """
+        body = "DAILY LIVESTOCK HEALTH MONITORING REPORT\n"
+        body += "=" * 60 + "\n\n"
+        body += f"Report Date: {datetime.now().strftime('%Y-%m-%d')}\n"
+        body += f"Generated: {datetime.now().strftime('%H:%M:%S')}\n\n"
+        
+        # Summary statistics
+        body += "SUMMARY STATISTICS:\n"
+        body += "-" * 20 + "\n"
+        
+        body += f"Total Animals Monitored: {report_data.get('total_animals', 0)}\n"
+        body += f"Total Health Records: {report_data.get('total_records', 0)}\n"
+        body += f"Farms Monitored: {report_data.get('farms_monitored', 0)}\n\n"
+        
+        # Anomaly statistics
+        body += "ANOMALY DETECTION:\n"
+        body += "-" * 20 + "\n"
+        
+        body += f"Anomalies Detected: {report_data.get('anomaly_count', 0)}\n"
+        
+        if 'anomaly_rate' in report_data:
+            body += f"Anomaly Rate: {report_data['anomaly_rate']:.1f}%\n"
+        
+        if 'animal_types' in report_data:
+            body += "\nANIMALS BY TYPE:\n"
+            for animal_type, count in report_data['animal_types'].items():
+                body += f"  {animal_type.title()}: {count}\n"
+        
+        # Recent alerts
+        if 'recent_alerts' in report_data and report_data['recent_alerts']:
+            body += "\nRECENT ALERTS (Last 7 days):\n"
+            body += "-" * 20 + "\n"
+            
+            for alert in report_data['recent_alerts'][:5]:  # Top 5
+                severity = alert.get('severity', 'unknown').upper()
+                farm = alert.get('farm_id', 'Unknown')
+                affected = alert.get('affected_animals', 0)
+                date = alert.get('created_at', 'Unknown')
+                
+                if isinstance(date, datetime):
+                    date = date.strftime('%Y-%m-%d')
+                
+                body += f"{severity}: Farm {farm} - {affected} animals ({date})\n"
+        
+        # Recommendations
+        body += "\nRECOMMENDATIONS:\n"
+        body += "-" * 20 + "\n"
+        
+        anomaly_count = report_data.get('anomaly_count', 0)
+        
+        if anomaly_count == 0:
+            body += "✓ All systems normal. Continue regular monitoring.\n"
+        elif anomaly_count <= 3:
+            body += "✓ Minor anomalies detected. Review individual animals.\n"
+        elif anomaly_count <= 10:
+            body += "⚠ Moderate anomalies detected. Increase monitoring frequency.\n"
+        else:
+            body += "⚠ Significant anomalies detected. Consider veterinary consultation.\n"
+        
+        # Footer
+        body += "\n" + "=" * 60 + "\n"
+        body += "Generated by Livestock Outbreak Detection System v1.0\n"
+        
+        return body
