@@ -8,18 +8,40 @@ database:
   type: "sqlite"
 
 anomaly_detection:
-  method: "statistical"  # Options: statistical, isolation_forest, lstm
-  threshold: 3.0  # Z-score threshold
-  window_size: 7  # Days for rolling window
+  method: "ensemble"  # Options: statistical, isolation_forest, ensemble
+  threshold: 3.0
+  window_size: 7
   min_anomalies_for_alert: 3
+  ensemble_weights:
+    statistical: 0.4
+    isolation_forest: 0.6
+
+isolation_forest:
+  contamination: 0.1  # Expected proportion of outliers
+  n_estimators: 100
+  max_samples: "auto"
+  random_state: 42
+
+email_alerts:
+  enabled: false  # Set to true to enable email alerts
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+  use_tls: true
+  sender_email: ""
+  sender_password: ""
+  recipients:
+    - "veterinary_officer@example.com"
+    - "farm_manager@example.com"
+  alert_threshold: "high"  # Send emails for alerts with this severity or higher
+  include_attachments: true
 
 livestock_metrics:
   normal_ranges:
     temperature:
-      cattle: [38.0, 39.0]  # Celsius
+      cattle: [38.0, 39.0]
       sheep: [38.5, 40.0]
       goat: [38.5, 40.5]
     heart_rate:
-      cattle: [48, 84]  # BPM
+      cattle: [48, 84]
       sheep: [70, 80]
-    activity_level: [0.5, 1.5]  # Relative to baseline
+    activity_level: [0.5, 1.5]
