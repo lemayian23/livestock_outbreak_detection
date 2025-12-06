@@ -1,0 +1,209 @@
+<!-- Add this after the metrics table section -->
+<div class="card" style="grid-column: span 3; margin-top: 20px;">
+    <h3>📤 Data Export</h3>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 15px;">
+        <button onclick="exportData('anomalies')" class="export-btn">
+            📊 Export Anomalies
+        </button>
+        <button onclick="exportData('alerts')" class="export-btn">
+            ⚠️ Export Alerts
+        </button>
+        <button onclick="exportData('health_metrics')" class="export-btn">
+            📈 Export Health Metrics
+        </button>
+        <button onclick="exportData('summary_txt')" class="export-btn">
+            📄 Summary Report (TXT)
+        </button>
+        <button onclick="exportData('summary_md')" class="export-btn">
+            📋 Summary Report (Markdown)
+        </button>
+    </div>
+    
+    <div id="exportStatus" style="display: none; padding: 10px; background-color: #f0f8ff; border-radius: 5px; margin-top: 10px;">
+        <p id="exportMessage"></p>
+        <div id="exportLinks" style="margin-top: 10px;"></div>
+    </div>
+    
+    <div style="margin-top: 20px;">
+        <h4>Recent Exports</h4>
+        <button onclick="loadExports()" style="margin-bottom: 10px;">🔄 Refresh List</button>
+        <div id="exportsList" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
+            <p>Click "Refresh List" to view recent exports</p>
+        </div>
+    </div>
+</div>
+
+<style>
+    .export-btn {
+        padding: 10px 15px;
+        background-color: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.3s;
+    }
+    
+    .export-btn:hover {
+        background-color: #45a049;
+    }
+    
+    .export-btn:active {
+        background-color: #3d8b40;
+    }
+    
+    .file-link {
+        display: inline-block;
+        margin: 5px;
+        padding: 8px 12px;
+        background-color: #e7f3fe;
+        border: 1px solid #b3d9ff;
+        border-radius: 4px;
+        text-decoration: none;
+        color: #0066cc;
+    }
+    
+    .file-link:hover {
+        background-color: #d1e7ff;
+    }
+    
+    .export-item {
+        padding: 8px;
+        border-bottom: 1px solid #eee;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .export-item:last-child {
+        border-bottom: none;
+    }
+</style>
+
+<script>
+    async function exportData(type) {
+        const exportStatus = document.getElementById('exportStatus');
+        const exportMessage = document.getElementById('exportMessage');
+        const exportLinks = document.getElementById('exportLinks');
+        
+        exportStatus.style.display = 'block';
+        exportMessage.textContent = 'Exporting data...';
+        exportLinks.innerHTML = '';
+        
+        try {
+            let url;
+            let params = {};
+            
+            switch(type) {
+                case 'anomalies':
+                    url = '/api/export/anomalies';
+                    break;
+                case 'alerts':
+                    url = '/api/export/alerts';
+                    break;
+                case 'health_metrics':
+                    url = '/api/export/health_metrics';
+                    params = { days: 30 };
+                    break;
+                case 'summary_txt':
+                    url = '/api/export/summary_report';
+                    params = { format: 'txt' };
+                    break;
+                case 'summary_md':
+                    url = '/api/export/summary_report';
+                    params = { format: 'md' };
+                    break;
+                default:
+                    throw new Error('Invalid export type');
+            }
+            
+            // Add query parameters
+            if (Object.keys(params).length > 0) {
+                const queryString = new URLSearchParams(params).toString();
+                url += '?' + queryString;
+            }
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.success) {
+                exportMessage.textContent = data.message;
+                
+                // Show download links
+                if (data.files) {
+                    exportLinks.innerHTML = '<strong>Download:</strong><br>';
+                    for (const [format, filepath] of Object.entries(data.files)) {
+                        const filename = filepath.split('/').pop();
+                        exportLinks.innerHTML += `
+                            <a href="/api/exports/download/${filename}" class="file-link">
+                                ${format.toUpperCase()}
+                            </a>
+                        `;
+                    }
+                } else if (data.file) {
+                    const filename = data.file.split('/').pop();
+                    exportLinks.innerHTML = `
+                        <strong>Download:</strong><br>
+                        <a href="/api/exports/download/${filename}" class="file-link">
+                            ${filename}
+                        </a>
+                    `;
+                }
+                
+                // Refresh exports list
+                loadExports();
+                
+            } else {
+                exportMessage.textContent = 'Error: ' + (data.error || 'Export failed');
+                exportMessage.style.color = '#dc3545';
+            }
+            
+        } catch (error) {
+            exportMessage.textContent = 'Error: ' + error.message;
+            exportMessage.style.color = '#dc3545';
+        }
+    }
+    
+    async function loadExports() {
+        const exportsList = document.getElementById('exportsList');
+        
+        try {
+            const response = await fetch('/api/exports/list?days=7');
+            const data = await response.json();
+            
+            if (data.success && data.exports.length > 0) {
+                let html = '';
+                
+                data.exports.forEach(exp => {
+                    const fileSize = exp.size_human || Math.round(exp.size / 1024) + ' KB';
+                    const modified = new Date(exp.modified).toLocaleString();
+                    
+                    html += `
+                        <div class="export-item">
+                            <div>
+                                <strong>${exp.filename}</strong><br>
+                                <small>Size: ${fileSize} | Modified: ${modified}</small>
+                            </div>
+                            <a href="/api/exports/download/${exp.filename}" class="file-link">
+                                Download
+                            </a>
+                        </div>
+                    `;
+                });
+                
+                exportsList.innerHTML = html;
+            } else {
+                exportsList.innerHTML = '<p>No recent exports found.</p>';
+            }
+            
+        } catch (error) {
+            exportsList.innerHTML = '<p>Error loading exports: ' + error.message + '</p>';
+        }
+    }
+    
+    // Load exports on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadExports();
+    });
+</script>
