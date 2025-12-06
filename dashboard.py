@@ -9,6 +9,7 @@ import sqlite3
 import os
 from datetime import datetime, timedelta
 import json
+import yaml  # Add at top with other imports
 
 app = Flask(__name__)
 
@@ -131,6 +132,267 @@ def get_anomaly_timeline():
         'success': True,
         'timeline': timeline
     })
+
+    import yaml  # Add at top with other imports
+
+# Add after existing routes in dashboard.py
+
+@app.route('/api/export/anomalies')
+def export_anomalies():
+    """Export anomaly data"""
+    try:
+        conn = get_db_connection()
+        
+        # Get anomalies from database
+        query = """
+        SELECT * FROM health_metrics 
+        WHERE is_anomaly = 1
+        ORDER BY date DESC
+        """
+        
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        if df.empty:
+            return jsonify({
+                'success': False,
+                'error': 'No anomaly data to export'
+            })
+        
+        # Export data
+        from src.export.exporter import DataExporter
+        exporter = DataExporter()
+        
+        exported_files = exporter.export_anomalies(df)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Exported {len(df)} anomalies',
+            'files': exported_files
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/export/alerts')
+def export_alerts():
+    """Export alert data"""
+    try:
+        conn = get_db_connection()
+        
+        # Get alerts from database
+        query = """
+        SELECT * FROM outbreak_alerts 
+        ORDER BY created_at DESC
+        """
+        
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        if df.empty:
+            return jsonify({
+                'success': False,
+                'error': 'No alert data to export'
+            })
+        
+        # Export data
+        from src.export.exporter import DataExporter
+        exporter = DataExporter()
+        
+        exported_files = exporter.export_alerts(df)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Exported {len(df)} alerts',
+            'files': exported_files
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/export/health_metrics')
+def export_health_metrics():
+    """Export health metrics data"""
+    try:
+        days = request.args.get('days', 30, type=int)
+        
+        conn = get_db_connection()
+        
+        # Get health metrics
+        query = f"""
+        SELECT * FROM health_metrics 
+        WHERE date >= date('now', '-{days} days')
+        ORDER BY date DESC
+        """
+        
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        if df.empty:
+            return jsonify({
+                'success': False,
+                'error': 'No health metrics data to export'
+            })
+        
+        # Export data
+        from src.export.exporter import DataExporter
+        exporter = DataExporter()
+        
+        exported_files = exporter.export_health_metrics(df, f'last_{days}_days')
+        
+        return jsonify({
+            'success': True,
+            'message': f'Exported {len(df)} health records',
+            'files': exported_files
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/export/summary_report')
+def export_summary_report():
+    """Generate and export summary report"""
+    try:
+        format_type = request.args.get('format', 'txt')
+        
+        if format_type not in ['txt', 'md']:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid format. Use "txt" or "md"'
+            })
+        
+        conn = get_db_connection()
+        
+        # Get anomalies
+        anomalies_query = """
+        SELECT * FROM health_metrics 
+        WHERE date >= date('now', '-7 days')
+        """
+        anomalies_df = pd.read_sql_query(anomalies_query, conn)
+        
+        # Get alerts
+        alerts_query = """
+        SELECT * FROM outbreak_alerts 
+        WHERE created_at >= date('now', '-7 days')
+        ORDER BY created_at DESC
+        """
+        alerts_df = pd.read_sql_query(alerts_query, conn)
+        conn.close()
+        
+        # Convert alerts to list of dicts
+        alerts = alerts_df.to_dict('records')
+        
+        # Generate report
+        from src.export.exporter import DataExporter
+        exporter = DataExporter()
+        
+        report_file = exporter.generate_summary_report(
+            anomalies_df, 
+            alerts, 
+            output_format=format_type
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Summary report generated',
+            'file': report_file
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/exports/list')
+def list_exports():
+    """List available export files"""
+    try:
+        days = request.args.get('days', 7, type=int)
+        
+        from src.export.exporter import DataExporter
+        exporter = DataExporter()
+        
+        exports = exporter.list_exports(days=days)
+        
+        return jsonify({
+            'success': True,
+            'count': len(exports),
+            'exports': exports
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/exports/cleanup', methods=['POST'])
+def cleanup_exports():
+    """Cleanup old export files"""
+    try:
+        days_to_keep = request.json.get('days_to_keep', 30)
+        
+        from src.export.exporter import DataExporter
+        exporter = DataExporter()
+        
+        deleted_count = exporter.cleanup_old_exports(days_to_keep)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Deleted {deleted_count} old export files'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/exports/download/<filename>')
+def download_export(filename):
+    """Download an exported file"""
+    try:
+        # Security check: prevent directory traversal
+        if '..' in filename or filename.startswith('/'):
+            return "Invalid filename", 400
+        
+        export_dir = './outputs/exports'
+        filepath = os.path.join(export_dir, filename)
+        
+        if not os.path.exists(filepath):
+            return "File not found", 404
+        
+        # Determine content type
+        ext = os.path.splitext(filename)[1].lower()
+        content_types = {
+            '.csv': 'text/csv',
+            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            '.json': 'application/json',
+            '.txt': 'text/plain',
+            '.md': 'text/markdown'
+        }
+        
+        content_type = content_types.get(ext, 'application/octet-stream')
+        
+        return send_file(
+            filepath,
+            as_attachment=True,
+            download_name=filename,
+            mimetype=content_type
+        )
+        
+    except Exception as e:
+        return str(e), 500
 
 if __name__ == '__main__':
     # Create templates directory if it doesn't exist
