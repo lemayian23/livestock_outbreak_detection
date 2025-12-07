@@ -9,7 +9,10 @@ import sqlite3
 import os
 from datetime import datetime, timedelta
 import json
-import yaml  # Add at top with other imports
+import yaml 
+
+import json
+from src.data_quality.analyzer import DataQualityAnalyzer
 
 app = Flask(__name__)
 
@@ -393,7 +396,235 @@ def download_export(filename):
         
     except Exception as e:
         return str(e), 500
+# Add these imports at the top if not already present
+import json
+from src.data_quality.analyzer import DataQualityAnalyzer
 
+# Add after existing routes in dashboard.py
+
+@app.route('/api/quality/analyze')
+def analyze_data_quality():
+    """Analyze data quality"""
+    try:
+        days = request.args.get('days', 30, type=int)
+        
+        conn = get_db_connection()
+        
+        # Get data for analysis
+        query = f"""
+        SELECT * FROM health_metrics 
+        WHERE date >= date('now', '-{days} days')
+        """
+        
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        # Analyze data quality
+        analyzer = DataQualityAnalyzer()
+        analysis = analyzer.analyze_dataframe(df)
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/quality/report')
+def get_quality_report():
+    """Get data quality report"""
+    try:
+        format_type = request.args.get('format', 'text')
+        
+        if format_type not in ['text', 'html', 'json']:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid format. Use "text", "html", or "json"'
+            })
+        
+        days = request.args.get('days', 30, type=int)
+        
+        conn = get_db_connection()
+        
+        # Get data for analysis
+        query = f"""
+        SELECT * FROM health_metrics 
+        WHERE date >= date('now', '-{days} days')
+        """
+        
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        # Analyze data quality
+        analyzer = DataQualityAnalyzer()
+        analysis = analyzer.analyze_dataframe(df)
+        
+        if format_type == 'json':
+            return jsonify({
+                'success': True,
+                'analysis': analysis
+            })
+        else:
+            report = analyzer.generate_quality_report(analysis, format_type)
+            
+            # Save report to file
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            report_dir = 'outputs/quality_reports'
+            os.makedirs(report_dir, exist_ok=True)
+            
+            if format_type == 'text':
+                filepath = os.path.join(report_dir, f'quality_report_{timestamp}.txt')
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(report)
+            else:  # html
+                filepath = os.path.join(report_dir, f'quality_report_{timestamp}.html')
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    f.write(report)
+            
+            return jsonify({
+                'success': True,
+                'report': report,
+                'filepath': filepath,
+                'format': format_type
+            })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/quality/issues')
+def get_quality_issues():
+    """Get data quality issues"""
+    try:
+        severity = request.args.get('severity', None)
+        
+        conn = get_db_connection()
+        
+        # Get recent data
+        query = """
+        SELECT * FROM health_metrics 
+        WHERE date >= date('now', '-30 days')
+        """
+        
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        # Analyze data quality
+        analyzer = DataQualityAnalyzer()
+        analysis = analyzer.analyze_dataframe(df)
+        
+        issues = analysis.get('issues', [])
+        
+        # Filter by severity if specified
+        if severity:
+            issues = [issue for issue in issues if issue.get('severity') == severity.lower()]
+        
+        return jsonify({
+            'success': True,
+            'count': len(issues),
+            'issues': issues
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/quality/score')
+def get_quality_score():
+    """Get overall data quality score"""
+    try:
+        conn = get_db_connection()
+        
+        # Get recent data
+        query = """
+        SELECT * FROM health_metrics 
+        WHERE date >= date('now', '-30 days')
+        """
+        
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        # Analyze data quality
+        analyzer = DataQualityAnalyzer()
+        analysis = analyzer.analyze_dataframe(df)
+        
+        score = analysis.get('quality_score', 0)
+        
+        return jsonify({
+            'success': True,
+            'score': score,
+            'rating': _get_quality_rating(score)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+def _get_quality_rating(score):
+    """Convert numeric score to rating"""
+    if score >= 90:
+        return {'text': 'Excellent', 'color': '#28a745', 'level': 5}
+    elif score >= 70:
+        return {'text': 'Good', 'color': '#ffc107', 'level': 4}
+    elif score >= 50:
+        return {'text': 'Fair', 'color': '#fd7e14', 'level': 3}
+    elif score >= 30:
+        return {'text': 'Poor', 'color': '#dc3545', 'level': 2}
+    else:
+        return {'text': 'Very Poor', 'color': '#6c757d', 'level': 1}
+
+@app.route('/api/quality/metrics')
+def get_quality_metrics():
+    """Get detailed quality metrics"""
+    try:
+        conn = get_db_connection()
+        
+        # Get data for last 90 days
+        query = """
+        SELECT * FROM health_metrics 
+        WHERE date >= date('now', '-90 days')
+        """
+        
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        if df.empty:
+            return jsonify({
+                'success': True,
+                'metrics': {},
+                'message': 'No data available for analysis'
+            })
+        
+        # Calculate various metrics
+        metrics = {}
+        
+        # Completeness metrics
+        total_cells = len(df) * len(df.columns)
+        non_missing_cells = df.notna().sum().sum()
+        metrics['completeness'] = {
+            'overall': (non_missing_cells / total_cells * 100) if total_cells > 0 else 0,
+            'by_column': {}
+        }
+        
+        for column in df.columns:
+            missing_pct = (df[column].isna().sum() / len(df)) * 100
+            metrics['completeness']['by_column'][column] = {
+                'missing_percent': float(missing_pct),
+                'missing_count': int(df[column].isna().sum())
+            }
+        
+        # Validity metrics (for numeric columns)
+        numeric_cols = ['temperature', 'heart_rate', '
 if __name__ == '__main__':
     # Create templates directory if it doesn't exist
     os.makedirs('templates', exist_ok=True)
