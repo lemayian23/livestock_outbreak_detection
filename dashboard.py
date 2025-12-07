@@ -396,235 +396,403 @@ def download_export(filename):
         
     except Exception as e:
         return str(e), 500
-# Add these imports at the top if not already present
-import json
-from src.data_quality.analyzer import DataQualityAnalyzer
 
-# Add after existing routes in dashboard.py
 
-@app.route('/api/quality/analyze')
-def analyze_data_quality():
-    """Analyze data quality"""
-    try:
-        days = request.args.get('days', 30, type=int)
-        
-        conn = get_db_connection()
-        
-        # Get data for analysis
-        query = f"""
-        SELECT * FROM health_metrics 
-        WHERE date >= date('now', '-{days} days')
-        """
-        
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        
-        # Analyze data quality
-        analyzer = DataQualityAnalyzer()
-        analysis = analyzer.analyze_dataframe(df)
-        
-        return jsonify({
-            'success': True,
-            'analysis': analysis
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
+<!-- Add this after the export section -->
+<div class="card" style="grid-column: span 3; margin-top: 20px;">
+    <h3>📊 Data Quality Dashboard</h3>
+    
+    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+        <button onclick="analyzeDataQuality()" class="quality-btn">
+            🔍 Analyze Data Quality
+        </button>
+        <button onclick="getQualityReport('text')" class="quality-btn">
+            📄 Text Report
+        </button>
+        <button onclick="getQualityReport('html')" class="quality-btn">
+            🌐 HTML Report
+        </button>
+        <button onclick="getQualityIssues()" class="quality-btn">
+            ⚠️ View Issues
+        </button>
+    </div>
+    
+    <div id="qualityDashboard" style="display: none;">
+        <!-- Quality score will be inserted here -->
+    </div>
+    
+    <div id="qualityStatus" style="margin-top: 15px; padding: 10px; border-radius: 5px; display: none;">
+        <!-- Status messages will appear here -->
+    </div>
+    
+    <div id="qualityDetails" style="margin-top: 20px;">
+        <!-- Detailed metrics will appear here -->
+    </div>
+</div>
 
-@app.route('/api/quality/report')
-def get_quality_report():
-    """Get data quality report"""
-    try:
-        format_type = request.args.get('format', 'text')
+<style>
+    .quality-btn {
+        padding: 10px 15px;
+        background-color: #17a2b8;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        transition: background-color 0.3s;
+    }
+    
+    .quality-btn:hover {
+        background-color: #138496;
+    }
+    
+    .quality-score {
+        text-align: center;
+        padding: 20px;
+        margin: 15px 0;
+        border-radius: 10px;
+        font-size: 18px;
+    }
+    
+    .quality-excellent { background-color: #d4edda; border-left: 5px solid #28a745; }
+    .quality-good { background-color: #fff3cd; border-left: 5px solid #ffc107; }
+    .quality-fair { background-color: #ffe5d0; border-left: 5px solid #fd7e14; }
+    .quality-poor { background-color: #f8d7da; border-left: 5px solid #dc3545; }
+    .quality-very-poor { background-color: #e2e3e5; border-left: 5px solid #6c757d; }
+    
+    .dimension-card {
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 15px;
+        margin: 10px 0;
+        background-color: #f8f9fa;
+    }
+    
+    .progress-container {
+        height: 20px;
+        background-color: #e9ecef;
+        border-radius: 10px;
+        margin: 10px 0;
+        overflow: hidden;
+    }
+    
+    .progress-bar {
+        height: 100%;
+        border-radius: 10px;
+        transition: width 0.5s;
+    }
+    
+    .issue-card {
+        padding: 10px;
+        margin: 5px 0;
+        border-radius: 5px;
+        border-left: 4px solid;
+    }
+    
+    .issue-high { background-color: #f8d7da; border-left-color: #dc3545; }
+    .issue-medium { background-color: #fff3cd; border-left-color: #ffc107; }
+    .issue-low { background-color: #d4edda; border-left-color: #28a745; }
+</style>
+
+<script>
+    async function analyzeDataQuality() {
+        const status = document.getElementById('qualityStatus');
+        const dashboard = document.getElementById('qualityDashboard');
         
-        if format_type not in ['text', 'html', 'json']:
-            return jsonify({
-                'success': False,
-                'error': 'Invalid format. Use "text", "html", or "json"'
-            })
+        status.style.display = 'block';
+        status.innerHTML = '<p>Analyzing data quality...</p>';
+        status.style.backgroundColor = '#e7f3fe';
         
-        days = request.args.get('days', 30, type=int)
-        
-        conn = get_db_connection()
-        
-        # Get data for analysis
-        query = f"""
-        SELECT * FROM health_metrics 
-        WHERE date >= date('now', '-{days} days')
-        """
-        
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        
-        # Analyze data quality
-        analyzer = DataQualityAnalyzer()
-        analysis = analyzer.analyze_dataframe(df)
-        
-        if format_type == 'json':
-            return jsonify({
-                'success': True,
-                'analysis': analysis
-            })
-        else:
-            report = analyzer.generate_quality_report(analysis, format_type)
+        try {
+            const response = await fetch('/api/quality/analyze');
+            const data = await response.json();
             
-            # Save report to file
-            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            report_dir = 'outputs/quality_reports'
-            os.makedirs(report_dir, exist_ok=True)
+            if (data.success) {
+                status.innerHTML = '<p>✓ Analysis complete!</p>';
+                status.style.backgroundColor = '#d4edda';
+                
+                // Display quality dashboard
+                displayQualityDashboard(data.analysis);
+                dashboard.style.display = 'block';
+                
+                // Also show detailed metrics
+                displayQualityMetrics(data.analysis);
+            } else {
+                status.innerHTML = `<p>✗ Error: ${data.error}</p>`;
+                status.style.backgroundColor = '#f8d7da';
+            }
+        } catch (error) {
+            status.innerHTML = `<p>✗ Error: ${error.message}</p>`;
+            status.style.backgroundColor = '#f8d7da';
+        }
+    }
+    
+    async function getQualityReport(format) {
+        const status = document.getElementById('qualityStatus');
+        
+        status.style.display = 'block';
+        status.innerHTML = `<p>Generating ${format.toUpperCase()} report...</p>`;
+        status.style.backgroundColor = '#e7f3fe';
+        
+        try {
+            const response = await fetch(`/api/quality/report?format=${format}`);
+            const data = await response.json();
             
-            if format_type == 'text':
-                filepath = os.path.join(report_dir, f'quality_report_{timestamp}.txt')
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    f.write(report)
-            else:  # html
-                filepath = os.path.join(report_dir, f'quality_report_{timestamp}.html')
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    f.write(report)
+            if (data.success) {
+                if (format === 'html') {
+                    // Open HTML in new window
+                    const newWindow = window.open();
+                    newWindow.document.write(data.report);
+                    newWindow.document.close();
+                    status.innerHTML = '<p>✓ HTML report opened in new window</p>';
+                } else if (format === 'text') {
+                    // Show text report in dialog
+                    showTextReport(data.report);
+                    status.innerHTML = '<p>✓ Text report generated</p>';
+                }
+                status.style.backgroundColor = '#d4edda';
+            } else {
+                status.innerHTML = `<p>✗ Error: ${data.error}</p>`;
+                status.style.backgroundColor = '#f8d7da';
+            }
+        } catch (error) {
+            status.innerHTML = `<p>✗ Error: ${error.message}</p>`;
+            status.style.backgroundColor = '#f8d7da';
+        }
+    }
+    
+    async function getQualityIssues() {
+        const status = document.getElementById('qualityStatus');
+        const details = document.getElementById('qualityDetails');
+        
+        status.style.display = 'block';
+        status.innerHTML = '<p>Fetching quality issues...</p>';
+        status.style.backgroundColor = '#e7f3fe';
+        
+        try {
+            const response = await fetch('/api/quality/issues');
+            const data = await response.json();
             
-            return jsonify({
-                'success': True,
-                'report': report,
-                'filepath': filepath,
-                'format': format_type
-            })
+            if (data.success) {
+                status.innerHTML = `<p>✓ Found ${data.count} issues</p>`;
+                status.style.backgroundColor = data.count > 0 ? '#fff3cd' : '#d4edda';
+                
+                // Display issues
+                if (data.issues.length > 0) {
+                    let html = '<h4>Quality Issues:</h4>';
+                    
+                    data.issues.forEach(issue => {
+                        const severity = issue.severity || 'medium';
+                        html += `
+                            <div class="issue-card issue-${severity}">
+                                <strong>${issue.type.replace('_', ' ').toUpperCase()}</strong>
+                                <p>${issue.message}</p>
+                                <small>Severity: ${severity.toUpperCase()}</small>
+                            </div>
+                        `;
+                    });
+                    
+                    details.innerHTML = html;
+                } else {
+                    details.innerHTML = '<p>No quality issues found! 🎉</p>';
+                }
+            } else {
+                status.innerHTML = `<p>✗ Error: ${data.error}</p>`;
+                status.style.backgroundColor = '#f8d7da';
+            }
+        } catch (error) {
+            status.innerHTML = `<p>✗ Error: ${error.message}</p>`;
+            status.style.backgroundColor = '#f8d7da';
+        }
+    }
+    
+    function displayQualityDashboard(analysis) {
+        const dashboard = document.getElementById('qualityDashboard');
+        const score = analysis.quality_score || 0;
         
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@app.route('/api/quality/issues')
-def get_quality_issues():
-    """Get data quality issues"""
-    try:
-        severity = request.args.get('severity', None)
+        // Determine quality class
+        let qualityClass = 'quality-very-poor';
+        let qualityText = 'Very Poor';
         
-        conn = get_db_connection()
-        
-        # Get recent data
-        query = """
-        SELECT * FROM health_metrics 
-        WHERE date >= date('now', '-30 days')
-        """
-        
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        
-        # Analyze data quality
-        analyzer = DataQualityAnalyzer()
-        analysis = analyzer.analyze_dataframe(df)
-        
-        issues = analysis.get('issues', [])
-        
-        # Filter by severity if specified
-        if severity:
-            issues = [issue for issue in issues if issue.get('severity') == severity.lower()]
-        
-        return jsonify({
-            'success': True,
-            'count': len(issues),
-            'issues': issues
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-@app.route('/api/quality/score')
-def get_quality_score():
-    """Get overall data quality score"""
-    try:
-        conn = get_db_connection()
-        
-        # Get recent data
-        query = """
-        SELECT * FROM health_metrics 
-        WHERE date >= date('now', '-30 days')
-        """
-        
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        
-        # Analyze data quality
-        analyzer = DataQualityAnalyzer()
-        analysis = analyzer.analyze_dataframe(df)
-        
-        score = analysis.get('quality_score', 0)
-        
-        return jsonify({
-            'success': True,
-            'score': score,
-            'rating': _get_quality_rating(score)
-        })
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        })
-
-def _get_quality_rating(score):
-    """Convert numeric score to rating"""
-    if score >= 90:
-        return {'text': 'Excellent', 'color': '#28a745', 'level': 5}
-    elif score >= 70:
-        return {'text': 'Good', 'color': '#ffc107', 'level': 4}
-    elif score >= 50:
-        return {'text': 'Fair', 'color': '#fd7e14', 'level': 3}
-    elif score >= 30:
-        return {'text': 'Poor', 'color': '#dc3545', 'level': 2}
-    else:
-        return {'text': 'Very Poor', 'color': '#6c757d', 'level': 1}
-
-@app.route('/api/quality/metrics')
-def get_quality_metrics():
-    """Get detailed quality metrics"""
-    try:
-        conn = get_db_connection()
-        
-        # Get data for last 90 days
-        query = """
-        SELECT * FROM health_metrics 
-        WHERE date >= date('now', '-90 days')
-        """
-        
-        df = pd.read_sql_query(query, conn)
-        conn.close()
-        
-        if df.empty:
-            return jsonify({
-                'success': True,
-                'metrics': {},
-                'message': 'No data available for analysis'
-            })
-        
-        # Calculate various metrics
-        metrics = {}
-        
-        # Completeness metrics
-        total_cells = len(df) * len(df.columns)
-        non_missing_cells = df.notna().sum().sum()
-        metrics['completeness'] = {
-            'overall': (non_missing_cells / total_cells * 100) if total_cells > 0 else 0,
-            'by_column': {}
+        if (score >= 90) {
+            qualityClass = 'quality-excellent';
+            qualityText = 'Excellent';
+        } else if (score >= 70) {
+            qualityClass = 'quality-good';
+            qualityText = 'Good';
+        } else if (score >= 50) {
+            qualityClass = 'quality-fair';
+            qualityText = 'Fair';
+        } else if (score >= 30) {
+            qualityClass = 'quality-poor';
+            qualityText = 'Poor';
         }
         
-        for column in df.columns:
-            missing_pct = (df[column].isna().sum() / len(df)) * 100
-            metrics['completeness']['by_column'][column] = {
-                'missing_percent': float(missing_pct),
-                'missing_count': int(df[column].isna().sum())
-            }
+        let html = `
+            <div class="quality-score ${qualityClass}">
+                <h3>Overall Data Quality</h3>
+                <div style="font-size: 48px; font-weight: bold; margin: 10px 0;">${score.toFixed(1)}%</div>
+                <p><strong>${qualityText}</strong></p>
+            </div>
+            
+            <h4>Dimension Scores:</h4>
+        `;
         
-        # Validity metrics (for numeric columns)
-        numeric_cols = ['temperature', 'heart_rate', '
+        // Add dimension scores
+        const dimensions = ['completeness', 'validity', 'consistency', 'timeliness'];
+        dimensions.forEach(dim => {
+            if (analysis[dim]) {
+                const score = analysis[dim].overall || 0;
+                html += `
+                    <div class="dimension-card">
+                        <strong>${dim.charAt(0).toUpperCase() + dim.slice(1)}</strong>
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span>${score.toFixed(1)}%</span>
+                            <small>Score</small>
+                        </div>
+                        <div class="progress-container">
+                            <div class="progress-bar" style="width: ${score}%; background-color: ${getScoreColor(score)}"></div>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+        
+        dashboard.innerHTML = html;
+    }
+    
+    function displayQualityMetrics(analysis) {
+        const details = document.getElementById('qualityDetails');
+        
+        let html = '<h4>Detailed Metrics:</h4>';
+        
+        // Basic stats
+        const stats = analysis.basic_stats || {};
+        html += `
+            <div class="dimension-card">
+                <strong>Basic Statistics</strong>
+                <p>Total Records: ${stats.total_records || 0}</p>
+                <p>Unique Animals: ${stats.unique_animals || 0}</p>
+        `;
+        
+        if (stats.date_range && stats.date_range.start) {
+            html += `<p>Date Range: ${stats.date_range.start} to ${stats.date_range.end}</p>`;
+        }
+        
+        html += '</div>';
+        
+        // Completeness details
+        const completeness = analysis.completeness || {};
+        if (completeness.by_column) {
+            html += `
+                <div class="dimension-card">
+                    <strong>Data Completeness</strong>
+                    <p>Overall: ${completeness.overall?.toFixed(1) || 0}%</p>
+                    <p>Missing values by column:</p>
+            `;
+            
+            Object.entries(completeness.by_column).forEach(([column, score]) => {
+                const missingPercent = 100 - (score || 0);
+                if (missingPercent > 0) {
+                    html += `<p style="margin: 5px 0;">${column}: ${missingPercent.toFixed(1)}% missing</p>`;
+                }
+            });
+            
+            html += '</div>';
+        }
+        
+        // Issues
+        const issues = analysis.issues || [];
+        if (issues.length > 0) {
+            html += '<div class="dimension-card"><strong>Issues Found:</strong>';
+            
+            issues.forEach(issue => {
+                const severity = issue.severity || 'medium';
+                html += `
+                    <div class="issue-card issue-${severity}" style="margin: 10px 0;">
+                        <strong>${issue.type.replace('_', ' ').toUpperCase()}</strong>
+                        <p>${issue.message}</p>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+        }
+        
+        details.innerHTML = html;
+    }
+    
+    function getScoreColor(score) {
+        if (score >= 90) return '#28a745';
+        if (score >= 70) return '#ffc107';
+        if (score >= 50) return '#fd7e14';
+        if (score >= 30) return '#dc3545';
+        return '#6c757d';
+    }
+    
+    function showTextReport(reportText) {
+        // Create modal dialog for text report
+        const modal = document.createElement('div');
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.backgroundColor = 'rgba(0,0,0,0.5)';
+        modal.style.zIndex = '1000';
+        modal.style.display = 'flex';
+        modal.style.justifyContent = 'center';
+        modal.style.alignItems = 'center';
+        
+        const content = document.createElement('div');
+        content.style.backgroundColor = 'white';
+        content.style.padding = '20px';
+        content.style.borderRadius = '5px';
+        content.style.maxWidth = '80%';
+        content.style.maxHeight = '80%';
+        content.style.overflow = 'auto';
+        content.style.fontFamily = 'monospace';
+        content.style.whiteSpace = 'pre-wrap';
+        
+        content.textContent = reportText;
+        
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = 'Close';
+        closeBtn.style.marginTop = '10px';
+        closeBtn.style.padding = '5px 10px';
+        closeBtn.onclick = function() {
+            document.body.removeChild(modal);
+        };
+        
+        content.appendChild(document.createElement('br'));
+        content.appendChild(closeBtn);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+    }
+    
+    // Load quality score on page load
+    async function loadQualityScore() {
+        try {
+            const response = await fetch('/api/quality/score');
+            const data = await response.json();
+            
+            if (data.success) {
+                // You could display the score in a small widget
+                console.log(`Data quality score: ${data.score}% (${data.rating.text})`);
+            }
+        } catch (error) {
+            console.log('Could not load quality score:', error.message);
+        }
+    }
+    
+    // Call on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadQualityScore();
+    });
+</script>
+
+
+
 if __name__ == '__main__':
     # Create templates directory if it doesn't exist
     os.makedirs('templates', exist_ok=True)
