@@ -10,6 +10,7 @@ import os
 from datetime import datetime, timedelta
 import json
 import yaml 
+from src.logging.alert_logger import AlertLogger
 
 import json
 from src.data_quality.analyzer import DataQualityAnalyzer
@@ -24,6 +25,145 @@ def get_db_connection():
 @app.route('/')
 def index():
     return render_template('index.html')
+
+@app.route('/api/logs/alerts')
+def get_alert_logs():
+    """Get recent alert logs"""
+    try:
+        days = request.args.get('days', 7, type=int)
+        
+        logger = AlertLogger()
+        alerts = logger.get_recent_alerts(days)
+        
+        return jsonify({
+            'success': True,
+            'count': len(alerts),
+            'alerts': alerts
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/logs/search')
+def search_alert_logs():
+    """Search alert logs"""
+    try:
+        keyword = request.args.get('keyword', '')
+        severity = request.args.get('severity', '')
+        farm_id = request.args.get('farm_id', '')
+        days = request.args.get('days', 30, type=int)
+        
+        logger = AlertLogger()
+        results = logger.search_alerts(keyword, severity, farm_id, days)
+        
+        return jsonify({
+            'success': True,
+            'count': len(results),
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/logs/stats')
+def get_alert_stats():
+    """Get alert statistics"""
+    try:
+        days = request.args.get('days', 7, type=int)
+        
+        logger = AlertLogger()
+        stats = logger.get_alert_stats(days)
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/logs/export')
+def export_alert_logs():
+    """Export alert logs"""
+    try:
+        days = request.args.get('days', 30, type=int)
+        format_type = request.args.get('format', 'csv')
+        
+        if format_type not in ['csv', 'json']:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid format. Use "csv" or "json"'
+            })
+        
+        logger = AlertLogger()
+        filepath = logger.export_alerts(days, format_type)
+        
+        if filepath and os.path.exists(filepath):
+            filename = os.path.basename(filepath)
+            return jsonify({
+                'success': True,
+                'message': f'Exported {days} days of alerts',
+                'filepath': filepath,
+                'filename': filename
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'No alerts to export or export failed'
+            })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/logs/summary')
+def get_log_summary():
+    """Get log system summary"""
+    try:
+        logger = AlertLogger()
+        summary = logger.get_log_summary()
+        
+        return jsonify({
+            'success': True,
+            'summary': summary
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+@app.route('/api/logs/cleanup', methods=['POST'])
+def cleanup_logs():
+    """Cleanup old log files"""
+    try:
+        days_to_keep = request.json.get('days_to_keep', 90)
+        
+        logger = AlertLogger()
+        deleted = logger.cleanup_old_logs(days_to_keep)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Deleted {deleted} old log files'
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })    
 
 @app.route('/api/health_metrics')
 def get_health_metrics():
