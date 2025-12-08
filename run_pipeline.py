@@ -21,12 +21,36 @@ from src.notification.manager import NotificationManager
 
 class OutbreakDetectionPipeline:
     def __init__(self, config_path: str = None):
+        self.alert_logger = AlertLogger()
         self.config = Config(config_path)
         self.db_manager = DatabaseManager(self.config.db_config.path)
         self.detector = AnomalyDetector(self.config)
         self.notification_manager = NotificationManager(self.config.raw_config)
         
     def run_simulation(self):
+
+        if clusters:
+    for cluster in clusters:
+        severity = self._determine_severity(cluster)
+        
+        # Create alert data
+        alert_data = {
+            'timestamp': datetime.now().isoformat(),
+            'severity': severity,
+            'farm_id': cluster['farm_id'],
+            'affected_animals': cluster['affected_animals'],
+            'message': f'Outbreak cluster detected: {cluster["affected_animals"]} animals',
+            'description': f'Cluster at {cluster["farm_id"]} with {cluster["affected_animals"]} affected animals',
+            'start_date': cluster.get('start_date', datetime.now()).isoformat() if hasattr(cluster.get('start_date'), 'isoformat') else str(cluster.get('start_date')),
+            'animal_types': cluster.get('animal_types', []),
+            'anomaly_score': cluster.get('avg_anomaly_score', 0),
+            'detection_method': self.config.anomaly_config.method
+        }
+        
+        # Log the alert
+        self.alert_logger.log_alert(alert_data)
+        
+        print(f"   📝 Alert logged for {severity} cluster at {cluster['farm_id']}")
         """Run complete simulation pipeline"""
         print("=" * 60)
         print("Livestock Outbreak Detection MVP")
