@@ -6,7 +6,7 @@ import pandas as pd
 import json
 import os
 from datetime import datetime
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -55,17 +55,21 @@ class DataExporter:
         exported_files = {}
         
         for fmt in formats:
-            if fmt == 'csv':
-                filepath = self._export_to_csv(df, base_filename)
-                exported_files['csv'] = filepath
-                
-            elif fmt == 'excel':
-                filepath = self._export_to_excel(df, base_filename)
-                exported_files['excel'] = filepath
-                
-            elif fmt == 'json':
-                filepath = self._export_to_json(df, base_filename)
-                exported_files['json'] = filepath
+            try:
+                if fmt == 'csv':
+                    filepath = self._export_to_csv(df, base_filename)
+                    exported_files['csv'] = filepath
+                    
+                elif fmt == 'excel':
+                    filepath = self._export_to_excel(df, base_filename)
+                    exported_files['excel'] = filepath
+                    
+                elif fmt == 'json':
+                    filepath = self._export_to_json(df, base_filename)
+                    exported_files['json'] = filepath
+            except Exception as e:
+                logger.warning(f"Failed to export to {fmt}: {str(e)}")
+                continue
         
         logger.info(f"Exported {len(df)} records to {', '.join(exported_files.keys())}")
         return exported_files
@@ -110,11 +114,11 @@ class DataExporter:
                 if col in df.columns:
                     summary_data.append(['', ''])
                     summary_data.append([f'{col} Statistics', ''])
-                    summary_data.append(['Mean', df[col].mean()])
-                    summary_data.append(['Std Dev', df[col].std()])
-                    summary_data.append(['Min', df[col].min()])
-                    summary_data.append(['Max', df[col].max()])
-                    summary_data.append(['Non-Null', df[col].count()])
+                    summary_data.append(['Mean', float(df[col].mean())])
+                    summary_data.append(['Std Dev', float(df[col].std())])
+                    summary_data.append(['Min', float(df[col].min())])
+                    summary_data.append(['Max', float(df[col].max())])
+                    summary_data.append(['Non-Null', int(df[col].count())])
             
             # Create summary dataframe
             summary_df = pd.DataFrame(summary_data, columns=['Metric', 'Value'])
@@ -142,10 +146,23 @@ class DataExporter:
         }
         
         with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(export_data, f, indent=2, default=str)
+            json.dump(export_data, f, indent=2, default=self._json_serializer)
         
         logger.debug(f"Exported JSON to {filepath}")
         return filepath
+    
+    def _json_serializer(self, obj):
+        """Custom JSON serializer for non-serializable objects"""
+        if isinstance(obj, (datetime, pd.Timestamp)):
+            return obj.isoformat()
+        elif isinstance(obj, pd.Series):
+            return obj.tolist()
+        elif pd.isna(obj):
+            return None
+        elif hasattr(obj, '__dict__'):
+            return obj.__dict__
+        else:
+            return str(obj)
     
     def export_anomalies(self, 
                         anomalies_df: pd.DataFrame,
@@ -167,10 +184,7 @@ class DataExporter:
         export_df = anomalies_df.copy()
         
         # Filter to only anomaly columns if needed
-        if include_detection_details:
-            # Keep all columns
-            pass
-        else:
+        if not include_detection_details:
             # Keep only essential columns
             essential_cols = ['tag_id', 'date', 'animal_type', 'farm_id', 
                             'temperature', 'heart_rate', 'activity_level',
@@ -283,6 +297,7 @@ class DataExporter:
         lines.append("")
         
         # Anomaly Summary
+        anomaly_count = 0
         if not anomalies_df.empty:
             total_records = len(anomalies_df)
             anomaly_count = anomalies_df['is_anomaly'].sum() if 'is_anomaly' in anomalies_df.columns else 0
@@ -360,6 +375,7 @@ class DataExporter:
         lines.append("")
         
         # Anomaly Summary
+        anomaly_count = 0
         if not anomalies_df.empty:
             total_records = len(anomalies_df)
             anomaly_count = anomalies_df['is_anomaly'].sum() if 'is_anomaly' in anomalies_df.columns else 0
@@ -444,7 +460,7 @@ class DataExporter:
         
         return "\n".join(lines)
     
-    def list_exports(self, days: int = 7) -> List[Dict]:
+    def list_exports(self, days: int = 7) -> List[Dict[str, Any]]:
         """
         List exported files from the last N days
         
@@ -468,22 +484,28 @@ class DataExporter:
                 continue
             
             # Check file age
-            file_mtime = os.path.getmtime(filepath)
-            if file_mtime < cutoff_time:
+            try:
+                file_mtime = os.path.getmtime(filepath)
+                if file_mtime < cutoff_time:
+                    continue
+            except OSError:
                 continue
             
             # Get file info
-            file_size = os.path.getsize(filepath)
-            file_ext = os.path.splitext(filename)[1].lower()
-            
-            exports.append({
-                'filename': filename,
-                'filepath': filepath,
-                'size': file_size,
-                'extension': file_ext,
-                'modified': datetime.fromtimestamp(file_mtime).isoformat(),
-                'size_human': self._human_readable_size(file_size)
-            })
+            try:
+                file_size = os.path.getsize(filepath)
+                file_ext = os.path.splitext(filename)[1].lower()
+                
+                exports.append({
+                    'filename': filename,
+                    'filepath': filepath,
+                    'size': file_size,
+                    'extension': file_ext,
+                    'modified': datetime.fromtimestamp(file_mtime).isoformat(),
+                    'size_human': self._human_readable_size(file_size)
+                })
+            except OSError:
+                continue
         
         # Sort by modification time (newest first)
         exports.sort(key=lambda x: x['modified'], reverse=True)
@@ -492,6 +514,9 @@ class DataExporter:
     
     def _human_readable_size(self, size_bytes: int) -> str:
         """Convert bytes to human readable size"""
+        if size_bytes == 0:
+            return "0 B"
+        
         for unit in ['B', 'KB', 'MB', 'GB']:
             if size_bytes < 1024.0:
                 return f"{size_bytes:.1f} {unit}"
@@ -518,14 +543,14 @@ class DataExporter:
             filepath = os.path.join(self.output_dir, filename)
             
             if os.path.isfile(filepath):
-                file_mtime = os.path.getmtime(filepath)
-                
-                if file_mtime < cutoff_time:
-                    try:
+                try:
+                    file_mtime = os.path.getmtime(filepath)
+                    
+                    if file_mtime < cutoff_time:
                         os.remove(filepath)
                         deleted_count += 1
                         logger.info(f"Deleted old export: {filename}")
-                    except Exception as e:
-                        logger.warning(f"Failed to delete {filename}: {str(e)}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete {filename}: {str(e)}")
         
         return deleted_count
