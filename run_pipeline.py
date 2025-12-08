@@ -18,6 +18,7 @@ from src.data_collection.simulator import DataSimulator
 from src.anomaly_detection.detector import AnomalyDetector
 from src.database.operations import save_metrics, save_alerts
 from src.notification.manager import NotificationManager
+from src.logging.alert_logger import AlertLogger
 
 class OutbreakDetectionPipeline:
     def __init__(self, config_path: str = None):
