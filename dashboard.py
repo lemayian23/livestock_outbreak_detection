@@ -570,6 +570,259 @@ def download_export(filename):
     </div>
 </div>
 
+<!-- Add this after the data quality section -->
+<div class="card" style="grid-column: span 3; margin-top: 20px;">
+    <h3>📋 Alert Logs</h3>
+    
+    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+        <button onclick="loadAlertLogs()" class="log-btn">
+            🔄 Refresh Logs
+        </button>
+        <button onclick="searchLogs()" class="log-btn">
+            🔍 Search Logs
+        </button>
+        <button onclick="exportLogs('csv')" class="log-btn">
+            📥 Export CSV
+        </button>
+        <button onclick="exportLogs('json')" class="log-btn">
+            📥 Export JSON
+        </button>
+    </div>
+    
+    <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+        <input type="text" id="searchKeyword" placeholder="Search keyword" style="padding: 8px; flex: 1;">
+        <select id="searchSeverity" style="padding: 8px;">
+            <option value="">All Severities</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+        </select>
+    </div>
+    
+    <div id="logStats" style="background-color: #f8f9fa; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+        <!-- Stats will appear here -->
+    </div>
+    
+    <div id="alertLogs" style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 5px;">
+        <p>Click "Refresh Logs" to load alert history</p>
+    </div>
+    
+    <div id="logStatus" style="margin-top: 10px; padding: 10px; display: none;"></div>
+</div>
+
+<style>
+    .log-btn {
+        padding: 8px 12px;
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    
+    .log-btn:hover {
+        background-color: #5a6268;
+    }
+    
+    .log-entry {
+        padding: 8px;
+        margin: 5px 0;
+        border-left: 4px solid;
+        background-color: #f8f9fa;
+        border-radius: 3px;
+    }
+    
+    .log-critical { border-left-color: #dc3545; }
+    .log-high { border-left-color: #fd7e14; }
+    .log-medium { border-left-color: #ffc107; }
+    .log-low { border-left-color: #28a745; }
+    .log-info { border-left-color: #17a2b8; }
+    
+    .stat-card {
+        display: inline-block;
+        margin: 0 10px 10px 0;
+        padding: 10px;
+        background-color: white;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        min-width: 100px;
+        text-align: center;
+    }
+</style>
+
+<script>
+    async function loadAlertLogs() {
+        const logsDiv = document.getElementById('alertLogs');
+        const statusDiv = document.getElementById('logStatus');
+        
+        logsDiv.innerHTML = '<p>Loading alert logs...</p>';
+        statusDiv.style.display = 'none';
+        
+        try {
+            const response = await fetch('/api/logs/alerts?days=7');
+            const data = await response.json();
+            
+            if (data.success) {
+                if (data.alerts.length > 0) {
+                    let html = `<p><strong>Recent Alerts (${data.alerts.length} total):</strong></p>`;
+                    
+                    data.alerts.slice(0, 20).forEach(alert => {
+                        const severity = alert.severity || 'info';
+                        const timestamp = alert.timestamp ? new Date(alert.timestamp).toLocaleString() : 'Unknown time';
+                        const farm = alert.farm_id || 'Unknown farm';
+                        const message = alert.message || 'No message';
+                        
+                        html += `
+                            <div class="log-entry log-${severity}">
+                                <strong>[${severity.toUpperCase()}] ${timestamp}</strong><br>
+                                Farm: ${farm} | Message: ${message}
+                            </div>
+                        `;
+                    });
+                    
+                    if (data.alerts.length > 20) {
+                        html += `<p><em>... and ${data.alerts.length - 20} more alerts</em></p>`;
+                    }
+                    
+                    logsDiv.innerHTML = html;
+                } else {
+                    logsDiv.innerHTML = '<p>No alerts found in the last 7 days.</p>';
+                }
+                
+                // Also load stats
+                loadLogStats();
+            } else {
+                logsDiv.innerHTML = `<p>Error: ${data.error}</p>`;
+            }
+        } catch (error) {
+            logsDiv.innerHTML = `<p>Error loading logs: ${error.message}</p>`;
+        }
+    }
+    
+    async function searchLogs() {
+        const keyword = document.getElementById('searchKeyword').value;
+        const severity = document.getElementById('searchSeverity').value;
+        const logsDiv = document.getElementById('alertLogs');
+        const statusDiv = document.getElementById('logStatus');
+        
+        logsDiv.innerHTML = '<p>Searching...</p>';
+        statusDiv.style.display = 'none';
+        
+        try {
+            let url = `/api/logs/search?days=30`;
+            if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+            if (severity) url += `&severity=${severity}`;
+            
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            if (data.success) {
+                if (data.results.length > 0) {
+                    let html = `<p><strong>Search Results (${data.results.length} found):</strong></p>`;
+                    
+                    data.results.forEach(alert => {
+                        const severity = alert.severity || 'info';
+                        const timestamp = alert.timestamp ? new Date(alert.timestamp).toLocaleString() : 'Unknown time';
+                        const farm = alert.farm_id || 'Unknown farm';
+                        const message = alert.message || 'No message';
+                        
+                        html += `
+                            <div class="log-entry log-${severity}">
+                                <strong>[${severity.toUpperCase()}] ${timestamp}</strong><br>
+                                Farm: ${farm} | Message: ${message}
+                            </div>
+                        `;
+                    });
+                    
+                    logsDiv.innerHTML = html;
+                    
+                    statusDiv.style.display = 'block';
+                    statusDiv.style.backgroundColor = '#d4edda';
+                    statusDiv.innerHTML = `<p>✓ Found ${data.results.length} matching alerts</p>`;
+                } else {
+                    logsDiv.innerHTML = '<p>No alerts match your search criteria.</p>';
+                    
+                    statusDiv.style.display = 'block';
+                    statusDiv.style.backgroundColor = '#fff3cd';
+                    statusDiv.innerHTML = '<p>No matching alerts found.</p>';
+                }
+            } else {
+                logsDiv.innerHTML = `<p>Error: ${data.error}</p>`;
+            }
+        } catch (error) {
+            logsDiv.innerHTML = `<p>Error searching logs: ${error.message}</p>`;
+        }
+    }
+    
+    async function loadLogStats() {
+        const statsDiv = document.getElementById('logStats');
+        
+        try {
+            const response = await fetch('/api/logs/stats?days=7');
+            const data = await response.json();
+            
+            if (data.success) {
+                const stats = data.stats;
+                let html = '<strong>Last 7 Days Statistics:</strong><br>';
+                
+                html += `
+                    <div class="stat-card">
+                        <div style="font-size: 24px; font-weight: bold;">${stats.total_alerts || 0}</div>
+                        <div>Total Alerts</div>
+                    </div>
+                `;
+                
+                // Severity breakdown
+                if (stats.by_severity) {
+                    Object.entries(stats.by_severity).forEach(([severity, count]) => {
+                        html += `
+                            <div class="stat-card">
+                                <div style="font-size: 20px; font-weight: bold;">${count}</div>
+                                <div>${severity.toUpperCase()}</div>
+                            </div>
+                        `;
+                    });
+                }
+                
+                statsDiv.innerHTML = html;
+            }
+        } catch (error) {
+            statsDiv.innerHTML = `<p>Error loading stats: ${error.message}</p>`;
+        }
+    }
+    
+    async function exportLogs(format) {
+        const statusDiv = document.getElementById('logStatus');
+        
+        statusDiv.style.display = 'block';
+        statusDiv.innerHTML = `<p>Exporting logs as ${format.toUpperCase()}...</p>`;
+        statusDiv.style.backgroundColor = '#e7f3fe';
+        
+        try {
+            const response = await fetch(`/api/logs/export?days=30&format=${format}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                statusDiv.innerHTML = `<p>✓ Export complete! <a href="/api/exports/download/${data.filename}" target="_blank">Download ${data.filename}</a></p>`;
+                statusDiv.style.backgroundColor = '#d4edda';
+            } else {
+                statusDiv.innerHTML = `<p>✗ Export failed: ${data.error}</p>`;
+                statusDiv.style.backgroundColor = '#f8d7da';
+            }
+        } catch (error) {
+            statusDiv.innerHTML = `<p>✗ Error: ${error.message}</p>`;
+            statusDiv.style.backgroundColor = '#f8d7da';
+        }
+    }
+    
+    // Load logs on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        loadAlertLogs();
+    });
+</script>
+
 <style>
     .quality-btn {
         padding: 10px 15px;
