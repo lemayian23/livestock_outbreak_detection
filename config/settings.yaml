@@ -45,3 +45,30 @@ livestock_metrics:
       cattle: [48, 84]
       sheep: [70, 80]
     activity_level: [0.5, 1.5]
+
+# Feature Toggles
+features:
+  data_collection: true
+  data_quality: true
+  preprocessing: true
+  anomaly_detection: true
+  ensemble_detection: true
+  notifications: true
+  email_alerts: true
+  export_reports: true
+  dashboard: true
+  
+  # Experimental features
+  experimental:
+    advanced_seasonal: false
+    real_time_streaming: false
+    ml_boosted_detection: false
+  
+  # Logging level
+  logging_level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  
+  # Performance
+  enable_caching: true
+  cache_ttl_minutes: 30
+  parallel_processing: false
+  max_workers: 4
