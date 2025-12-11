@@ -1,246 +1,340 @@
-#!/usr/bin/env python3
 """
-Main pipeline for offline disease outbreak detection
+Main pipeline runner with feature toggle support
 """
-
+import logging
+import yaml
+from typing import Dict, Any
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-import pandas as pd
-from datetime import datetime, timedelta
-import warnings
-warnings.filterwarnings('ignore')
+# Add src to path
+sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.utils.config import Config
-from src.database.models import DatabaseManager
-from src.data_collection.simulator import DataSimulator
-from src.anomaly_detection.detector import AnomalyDetector
-from src.database.operations import save_metrics, save_alerts
-from src.notification.manager import NotificationManager
-from src.logging.alert_logger import AlertLogger
+from utils.config import load_config
+from utils.feature_manager import get_feature_manager, FeatureDisabledError
+from data_collection.ingestion import DataCollector
+from data_quality.analyzer import DataQualityAnalyzer
+from preprocessing.cleaner import DataCleaner
+from preprocessing.normalizer import DataNormalizer
+from anomaly_detection.detector import AnomalyDetector
+from anomaly_detection.ensemble import EnsembleDetector
+from notification.manager import NotificationManager
+from export.exporter import ReportExporter
+from visualization.dashboard import Dashboard
 
-class OutbreakDetectionPipeline:
-    def __init__(self, config_path: str = None):
-        self.alert_logger = AlertLogger()
-        self.config = Config(config_path)
-        self.db_manager = DatabaseManager(self.config.db_config.path)
-        self.detector = AnomalyDetector(self.config)
-        self.notification_manager = NotificationManager(self.config.raw_config)
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+class FeatureAwarePipeline:
+    """
+    Pipeline that respects feature toggles
+    """
+    
+    def __init__(self, config_path: str = "config/settings.yaml"):
+        """Initialize pipeline with configuration"""
+        self.config = load_config(config_path)
+        self.feature_manager = get_feature_manager(self.config)
+        self.components = {}
         
-    def run_simulation(self):
-
-        if clusters:
-    for cluster in clusters:
-        severity = self._determine_severity(cluster)
+        logger.info("Pipeline initialized with feature toggles")
+        self._log_feature_status()
+    
+    def _log_feature_status(self) -> None:
+        """Log the status of all features"""
+        status = self.feature_manager.get_feature_status()
+        enabled = [name for name, info in status.items() if info['enabled']]
+        disabled = [name for name, info in status.items() if not info['enabled']]
         
-        # Create alert data
-        alert_data = {
-            'timestamp': datetime.now().isoformat(),
-            'severity': severity,
-            'farm_id': cluster['farm_id'],
-            'affected_animals': cluster['affected_animals'],
-            'message': f'Outbreak cluster detected: {cluster["affected_animals"]} animals',
-            'description': f'Cluster at {cluster["farm_id"]} with {cluster["affected_animals"]} affected animals',
-            'start_date': cluster.get('start_date', datetime.now()).isoformat() if hasattr(cluster.get('start_date'), 'isoformat') else str(cluster.get('start_date')),
-            'animal_types': cluster.get('animal_types', []),
-            'anomaly_score': cluster.get('avg_anomaly_score', 0),
-            'detection_method': self.config.anomaly_config.method
+        logger.info(f"Enabled features: {len(enabled)}")
+        logger.info(f"Disabled features: {len(disabled)}")
+        
+        if disabled:
+            logger.debug(f"Disabled: {', '.join(disabled)}")
+    
+    def initialize_components(self) -> None:
+        """Initialize pipeline components based on enabled features"""
+        
+        # Data collection
+        if self.feature_manager.is_enabled('data_collection'):
+            from data_collection.ingestion import DataCollector
+            self.components['data_collector'] = DataCollector(self.config)
+            logger.info("Data collector initialized")
+        else:
+            logger.info("Data collection feature is disabled")
+        
+        # Data quality
+        if self.feature_manager.is_enabled('data_quality'):
+            from data_quality.analyzer import DataQualityAnalyzer
+            self.components['data_quality'] = DataQualityAnalyzer(self.config)
+            logger.info("Data quality analyzer initialized")
+        
+        # Preprocessing
+        if self.feature_manager.is_enabled('preprocessing'):
+            from preprocessing.cleaner import DataCleaner
+            from preprocessing.normalizer import DataNormalizer
+            self.components['cleaner'] = DataCleaner(self.config)
+            self.components['normalizer'] = DataNormalizer(self.config)
+            logger.info("Preprocessing components initialized")
+        
+        # Anomaly detection
+        if self.feature_manager.is_enabled('anomaly_detection'):
+            from anomaly_detection.detector import AnomalyDetector
+            self.components['detector'] = AnomalyDetector(self.config)
+            logger.info("Anomaly detector initialized")
+        
+        # Ensemble detection
+        if self.feature_manager.is_enabled('ensemble_detection'):
+            from anomaly_detection.ensemble import EnsembleDetector
+            self.components['ensemble'] = EnsembleDetector(self.config)
+            logger.info("Ensemble detector initialized")
+        
+        # Notifications
+        if self.feature_manager.is_enabled('notifications'):
+            from notification.manager import NotificationManager
+            self.components['notifications'] = NotificationManager(self.config)
+            logger.info("Notification manager initialized")
+        
+        # Export
+        if self.feature_manager.is_enabled('export_reports'):
+            from export.exporter import ReportExporter
+            self.components['exporter'] = ReportExporter(self.config)
+            logger.info("Report exporter initialized")
+        
+        # Dashboard
+        if self.feature_manager.is_enabled('dashboard'):
+            from visualization.dashboard import Dashboard
+            self.components['dashboard'] = Dashboard(self.config)
+            logger.info("Dashboard initialized")
+    
+    def run(self, input_data=None) -> Dict[str, Any]:
+        """
+        Run the pipeline with feature awareness
+        
+        Args:
+            input_data: Optional input data (if data_collection is disabled)
+            
+        Returns:
+            Dictionary with pipeline results
+        """
+        results = {
+            'success': False,
+            'features_used': [],
+            'warnings': [],
+            'errors': []
         }
         
-        # Log the alert
-        self.alert_logger.log_alert(alert_data)
-        
-        print(f"   📝 Alert logged for {severity} cluster at {cluster['farm_id']}")
-        """Run complete simulation pipeline"""
-        print("=" * 60)
-        print("Livestock Outbreak Detection MVP")
-        print(f"Detection Method: {self.config.anomaly_config.method}")
-        print("=" * 60)
-        
-        # Step 1: Generate simulated data
-        print("\n1. Generating simulated data...")
-        simulator = DataSimulator(self.config)
-        data = simulator.generate_test_data(n_animals=50, n_days=90)
-        print(f"   Generated {len(data)} records for 50 animals over 90 days")
-        
-        # Step 2: Detect anomalies
-        print("\n2. Running anomaly detection...")
-        result_df = self.detector.detect(data)
-        
-        n_anomalies = result_df['is_anomaly'].sum()
-        anomaly_rate = n_anomalies/len(result_df)*100 if len(result_df) > 0 else 0
-        print(f"   Detected {n_anomalies} anomalous records ({anomaly_rate:.1f}%)")
-        
-        # Step 3: Detect clusters
-        print("\n3. Detecting outbreak clusters...")
-        clusters = self.detector.detect_outbreaks(result_df, time_window='7D')
-        
-        if clusters:
-            print(f"   Found {len(clusters)} potential outbreak clusters:")
-            for i, cluster in enumerate(clusters, 1):
-                severity = self._determine_severity(cluster)
-                print(f"   Cluster {i}: {cluster['farm_id']} - "
-                      f"{cluster['affected_animals']} animals - "
-                      f"Severity: {severity}")
-        else:
-            print("   No outbreak clusters detected")
-        
-        # Step 4: Save to database
-        print("\n4. Saving results to database...")
-        with self.db_manager.get_session() as session:
-            save_metrics(session, result_df)
+        try:
+            # Step 1: Collect data (if enabled)
+            if self.feature_manager.is_enabled('data_collection'):
+                logger.info("Collecting data...")
+                data = self.components['data_collector'].collect()
+                results['features_used'].append('data_collection')
+            elif input_data is not None:
+                logger.info("Using provided input data")
+                data = input_data
+            else:
+                raise FeatureDisabledError(
+                    "data_collection is disabled and no input data provided"
+                )
             
-            if clusters:
-                for cluster in clusters:
-                    severity = self._determine_severity(cluster)
-                    
-                    alert_data = {
-                        'farm_id': cluster['farm_id'],
-                        'alert_type': 'cluster',
-                        'severity': severity,
-                        'description': f"Outbreak cluster detected: "
-                                     f"{cluster['affected_animals']} animals showing anomalies",
-                        'affected_animals': cluster['affected_animals'],
-                        'start_date': cluster['start_date'],
-                        'end_date': cluster['end_date'],
-                        'animal_types': cluster.get('animal_types', []),
-                        'detection_methods': cluster.get('detection_methods', 
-                                                        [self.config.anomaly_config.method]),
-                        'avg_anomaly_score': cluster.get('avg_anomaly_score', 0),
-                        'ensemble_score': cluster.get('ensemble_score', 0),
-                        'features_contributing': cluster.get('features_contributing', [])
-                    }
-                    
-                    # Save to database
-                    save_alerts(session, alert_data)
-                    
-                    # Send email notification for high severity alerts
-                    if severity in ['high', 'critical']:
-                        print(f"   Sending alert for {severity} severity cluster...")
-                        notification_result = self.notification_manager.send_outbreak_alert(
-                            alert_data
-                        )
-                        
-                        if notification_result.get('channels', {}).get('email', {}).get('success'):
-                            print(f"     ✓ Email alert sent")
-                        else:
-                            print(f"     ✗ Email alert failed")
-        
-        # Step 5: Generate reports
-        print("\n5. Generating reports...")
-        report_file = self.generate_report(result_df, clusters)
-        
-        # Step 6: Send daily report if configured
-        if hasattr(self.notification_manager, 'email_sender') and self.notification_manager.email_sender:
-            print("\n6. Sending daily report...")
-            report_data = self._prepare_daily_report_data(result_df, clusters)
-            report_result = self.notification_manager.send_daily_report(
-                report_data, 
-                report_file
-            )
+            # Step 2: Data quality checks (if enabled)
+            if self.feature_manager.is_enabled('data_quality'):
+                logger.info("Running data quality checks...")
+                quality_report = self.components['data_quality'].analyze(data)
+                results['data_quality'] = quality_report
+                results['features_used'].append('data_quality')
+                
+                # Log quality issues
+                if quality_report.get('has_issues', False):
+                    results['warnings'].append('Data quality issues detected')
             
-            if report_result.get('channels', {}).get('email', {}).get('success'):
-                print("   ✓ Daily report email sent")
-            else:
-                print("   ✗ Daily report email failed")
+            # Step 3: Preprocessing (if enabled)
+            if self.feature_manager.is_enabled('preprocessing'):
+                logger.info("Preprocessing data...")
+                # Clean
+                if 'cleaner' in self.components:
+                    data = self.components['cleaner'].clean(data)
+                
+                # Normalize
+                if 'normalizer' in self.components:
+                    data = self.components['normalizer'].normalize(data)
+                
+                results['features_used'].append('preprocessing')
+            
+            # Step 4: Anomaly detection (if enabled)
+            anomalies = None
+            if self.feature_manager.is_enabled('anomaly_detection'):
+                logger.info("Running anomaly detection...")
+                anomalies = self.components['detector'].detect(data)
+                results['anomalies'] = anomalies
+                results['features_used'].append('anomaly_detection')
+            
+            # Step 5: Ensemble detection (if enabled)
+            if (self.feature_manager.is_enabled('ensemble_detection') and 
+                anomalies is not None):
+                logger.info("Running ensemble detection...")
+                ensemble_result = self.components['ensemble'].ensemble_detect(
+                    data, anomalies
+                )
+                results['ensemble_result'] = ensemble_result
+                results['features_used'].append('ensemble_detection')
+            
+            # Step 6: Notifications (if enabled)
+            if (self.feature_manager.is_enabled('notifications') and 
+                anomalies is not None and 
+                len(anomalies) > 0):
+                
+                logger.info("Sending notifications...")
+                
+                # Only send email alerts if that feature is also enabled
+                if self.feature_manager.is_enabled('email_alerts'):
+                    self.components['notifications'].send_email_alert(
+                        anomalies, "Anomalies detected in livestock data"
+                    )
+                    results['features_used'].append('email_alerts')
+                else:
+                    # Just log, don't send email
+                    self.components['notifications'].log_alert(anomalies)
+                
+                results['features_used'].append('notifications')
+            
+            # Step 7: Export reports (if enabled)
+            if self.feature_manager.is_enabled('export_reports'):
+                logger.info("Exporting reports...")
+                export_path = self.components['exporter'].export(
+                    data, anomalies, results
+                )
+                results['export_path'] = export_path
+                results['features_used'].append('export_reports')
+            
+            # Step 8: Update dashboard (if enabled)
+            if self.feature_manager.is_enabled('dashboard'):
+                logger.info("Updating dashboard...")
+                self.components['dashboard'].update(data, anomalies, results)
+                results['features_used'].append('dashboard')
+            
+            results['success'] = True
+            logger.info("Pipeline completed successfully")
+            
+        except FeatureDisabledError as e:
+            logger.warning(f"Feature disabled: {e}")
+            results['errors'].append(str(e))
+        except Exception as e:
+            logger.error(f"Pipeline error: {e}")
+            results['errors'].append(str(e))
+            raise
         
-        print("\n" + "=" * 60)
-        print("Pipeline completed successfully!")
-        print("=" * 60)
-        
-        return result_df, clusters
+        return results
     
-    def _determine_severity(self, cluster: dict) -> str:
-        """Determine alert severity based on cluster characteristics"""
-        n_animals = cluster['affected_animals']
-        score = cluster.get('avg_anomaly_score', 0)
-        ensemble_score = cluster.get('ensemble_score', 0)
+    def run_with_features(self, enabled_features: Dict[str, bool]) -> Dict[str, Any]:
+        """
+        Run pipeline with temporary feature states
         
-        # Use ensemble score if available
-        if ensemble_score > 0:
-            if ensemble_score >= 7.0 or n_animals >= 10:
-                return 'critical'
-            elif ensemble_score >= 5.0 or n_animals >= 5:
-                return 'high'
-            elif ensemble_score >= 3.0 or n_animals >= 3:
-                return 'medium'
-            else:
-                return 'low'
-        else:
-            # Fallback to original logic
-            if n_animals >= 10 or score >= 5.0:
-                return 'critical'
-            elif n_animals >= 5 or score >= 4.0:
-                return 'high'
-            elif n_animals >= 3 or score >= 3.0:
-                return 'medium'
-            else:
-                return 'low'
-    
-    def _prepare_daily_report_data(self, df: pd.DataFrame, clusters: list) -> dict:
-        """Prepare data for daily report"""
-        total_animals = df['tag_id'].nunique()
-        total_records = len(df)
-        anomaly_count = df['is_anomaly'].sum()
-        farms_monitored = df['farm_id'].nunique() if 'farm_id' in df.columns else 1
+        Args:
+            enabled_features: Dictionary mapping feature names to boolean states
+            
+        Returns:
+            Pipeline results
+        """
+        # Store original states
+        original_states = {}
+        for feature_name, enabled in enabled_features.items():
+            if feature_name in self.feature_manager._features:
+                original_states[feature_name] = (
+                    self.feature_manager._features[feature_name].current_state
+                )
+                self.feature_manager._features[feature_name].current_state = enabled
         
-        # Animal type distribution
-        animal_types = {}
-        if 'animal_type' in df.columns:
-            animal_counts = df['animal_type'].value_counts()
-            animal_types = animal_counts.to_dict()
+        try:
+            results = self.run()
+        finally:
+            # Restore original states
+            for feature_name, state in original_states.items():
+                self.feature_manager._features[feature_name].current_state = state
         
-        # Recent alerts (last 7 days)
-        recent_alerts = []
-        if clusters:
-            # Filter clusters from last 7 days
-            week_ago = datetime.now() - timedelta(days=7)
-            for cluster in clusters:
-                if 'start_date' in cluster and cluster['start_date'] >= week_ago:
-                    recent_alerts.append({
-                        'farm_id': cluster.get('farm_id', 'Unknown'),
-                        'severity': self._determine_severity(cluster),
-                        'affected_animals': cluster.get('affected_animals', 0),
-                        'created_at': cluster.get('start_date', datetime.now())
-                    })
-        
-        return {
-            'total_animals': total_animals,
-            'total_records': total_records,
-            'anomaly_count': anomaly_count,
-            'anomaly_rate': (anomaly_count / total_records * 100) if total_records > 0 else 0,
-            'farms_monitored': farms_monitored,
-            'animal_types': animal_types,
-            'recent_alerts': recent_alerts
-        }
-    
-    def generate_report(self, df: pd.DataFrame, clusters: list):
-        """Generate HTML report and return file path"""
-        from src.visualization.dashboard import HealthDashboard
-        
-        dashboard = HealthDashboard()
-        
-        # Create HTML report
-        html_content = dashboard.create_summary_report(df, clusters)
-        
-        # Save report
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        report_file = dashboard.save_report(
-            html_content, 
-            filename=f"health_report_{timestamp}.html"
-        )
-        
-        print(f"   Report saved to: {report_file}")
-        return report_file
+        return results
 
-if __name__ == "__main__":
-    # Create necessary directories
-    os.makedirs('data', exist_ok=True)
-    os.makedirs('outputs/reports', exist_ok=True)
-    os.makedirs('outputs/alerts', exist_ok=True)
-    os.makedirs('models/saved_models', exist_ok=True)
+
+def main():
+    """Main entry point"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Run livestock outbreak detection pipeline')
+    parser.add_argument('--config', default='config/settings.yaml',
+                       help='Path to configuration file')
+    parser.add_argument('--disable', nargs='+', default=[],
+                       help='Features to disable (comma-separated)')
+    parser.add_argument('--enable', nargs='+', default=[],
+                       help='Features to enable (comma-separated)')
+    parser.add_argument('--list-features', action='store_true',
+                       help='List all available features and exit')
+    
+    args = parser.parse_args()
+    
+    # Load config
+    config = load_config(args.config)
+    
+    # Get feature manager
+    feature_manager = get_feature_manager(config)
+    
+    # List features if requested
+    if args.list_features:
+        print("\n=== Available Features ===")
+        for name, feature in feature_manager.get_all_features().items():
+            status = "✓" if feature_manager.is_enabled(name) else "✗"
+            state = feature.state.value.upper()
+            print(f"{status} {name:30} [{state:12}] - {feature.description}")
+        print()
+        
+        # Show experimental features separately
+        experimental = feature_manager.get_features_by_category('experimental')
+        if experimental:
+            print("=== Experimental Features ===")
+            for name, feature in experimental.items():
+                status = "✓" if feature_manager.is_enabled(name) else "✗"
+                print(f"{status} {name:30} - {feature.description}")
+        return
+    
+    # Modify feature states based on CLI args
+    for feature in args.disable:
+        if feature in feature_manager._features:
+            feature_manager.disable_feature(feature)
+            print(f"Disabled feature: {feature}")
+        else:
+            print(f"Warning: Unknown feature '{feature}'")
+    
+    for feature in args.enable:
+        if feature in feature_manager._features:
+            feature_manager.enable_feature(feature)
+            print(f"Enabled feature: {feature}")
+        else:
+            print(f"Warning: Unknown feature '{feature}'")
     
     # Run pipeline
-    pipeline = OutbreakDetectionPipeline()
-    pipeline.run_simulation()
+    pipeline = FeatureAwarePipeline(args.config)
+    pipeline.initialize_components()
+    
+    print(f"\nRunning pipeline with {len(pipeline.feature_manager.get_enabled_features())} enabled features")
+    results = pipeline.run()
+    
+    # Print summary
+    if results['success']:
+        print(f"\n✅ Pipeline completed successfully!")
+        print(f"   Features used: {', '.join(results['features_used'])}")
+        if 'anomalies' in results:
+            print(f"   Anomalies detected: {len(results['anomalies'])}")
+        if results.get('warnings'):
+            print(f"   Warnings: {', '.join(results['warnings'])}")
+    else:
+        print(f"\n❌ Pipeline failed")
+        if results.get('errors'):
+            print(f"   Errors: {', '.join(results['errors'])}")
+
+
+if __name__ == "__main__":
+    main()
