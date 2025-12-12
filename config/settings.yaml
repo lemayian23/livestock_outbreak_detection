@@ -72,3 +72,33 @@ features:
   cache_ttl_minutes: 30
   parallel_processing: false
   max_workers: 4
+
+  # Monitoring configuration
+monitoring:
+  enabled: true
+  interval_seconds: 60
+  max_history: 100
+  health_check_timeout: 5
+  
+  # Alert thresholds
+  thresholds:
+    cpu_warning: 80
+    cpu_critical: 90
+    memory_warning: 85
+    memory_critical: 95
+    disk_warning: 85
+    disk_critical: 95
+  
+  # Services to monitor
+  services:
+    - name: "Database"
+      host: "localhost"
+      port: 5432
+    - name: "API"
+      host: "localhost"
+      port: 8000
+  
+  # Report settings
+  save_reports: true
+  report_dir: "outputs/health_reports"
+  report_interval_minutes: 30
