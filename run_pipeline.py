@@ -22,6 +22,9 @@ from notification.manager import NotificationManager
 from export.exporter import ReportExporter
 from visualization.dashboard import Dashboard
 
+from data_validation.validator import get_data_validator
+from data_validation.schema import get_schema_registry
+
 # Set up logging
 logging.basicConfig(
     level=logging.INFO,
