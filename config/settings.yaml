@@ -102,3 +102,31 @@ monitoring:
   save_reports: true
   report_dir: "outputs/health_reports"
   report_interval_minutes: 30
+
+  # Data validation configuration
+validation:
+  enabled: true
+  strict_mode: false  # If true, pipeline fails on validation errors
+  auto_correct: true  # Attempt to auto-correct minor issues
+  
+  # Schema validation
+  validate_schema: true
+  required_schema: "daily_health_metrics"
+  
+  # Custom rules
+  enable_custom_rules: true
+  rules_to_apply:
+    - "sick_animals_not_exceed_total"
+    - "deceased_not_exceed_sick"
+    - "activity_sickness_correlation"
+  
+  # Quality thresholds
+  quality_thresholds:
+    min_completeness: 0.8
+    min_accuracy: 0.9
+    min_quality_score: 0.7
+  
+  # Reporting
+  save_reports: true
+  report_dir: "outputs/validation_reports"
+  generate_quality_score: true
