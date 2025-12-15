@@ -1,0 +1,43 @@
+# Development Environment Configuration
+
+app:
+  debug: true
+  log_level: "DEBUG"
+  reload: true
+
+database:
+  host: "localhost"
+  port: 5432
+  name: "livestock_dev"
+  pool_size: 5
+
+api:
+  port: 8000
+  workers: 2
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://127.0.0.1:3000"
+
+monitoring:
+  enabled: true
+  interval_seconds: 30
+  prometheus_port: 9090
+
+features:
+  data_collection: true
+  data_quality: true
+  anomaly_detection: true
+  notifications: true
+  dashboard: true
+  experimental:
+    advanced_seasonal: true
+    real_time_streaming: false
+
+validation:
+  strict_mode: false
+  auto_correct: true
+
+logging:
+  console: true
+  file: false
+  level: "DEBUG"
