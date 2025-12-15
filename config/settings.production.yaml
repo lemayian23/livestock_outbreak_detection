@@ -1,0 +1,53 @@
+# Production Environment Configuration
+
+app:
+  debug: false
+  log_level: "WARNING"
+  reload: false
+
+database:
+  host: "${DB_HOST}"
+  port: "${DB_PORT}"
+  name: "${DB_NAME}"
+  pool_size: 20
+  timeout: 60
+
+api:
+  port: 8080
+  workers: 8
+  timeout: 300
+  cors_origins:
+    - "https://yourdomain.com"
+
+monitoring:
+  enabled: true
+  interval_seconds: 60
+  prometheus_port: 9090
+  alert_threshold: 0.9
+
+features:
+  data_collection: true
+  data_quality: true
+  anomaly_detection: true
+  notifications: true
+  dashboard: true
+  experimental:
+    advanced_seasonal: false
+    real_time_streaming: false
+
+validation:
+  strict_mode: true
+  auto_correct: false
+
+security:
+  require_https: true
+  rate_limit: true
+  enable_auth: true
+
+logging:
+  console: false
+  file: true
+  level: "INFO"
+  file_path: "/var/log/livestock/app.log"
+  max_size_mb: 100
+  backup_count: 5
