@@ -43,7 +43,14 @@ class FeatureAwarePipeline:
         self.config = load_config(config_path)
         self.feature_manager = get_feature_manager(self.config)
         self.components = {}
-        
+
+        # Initialize data validator if enabled
+        self.data_validator = None
+        validation_config = self.config.get('validation', {})
+        if validation_config.get('enabled', False):
+        self.data_validator = get_data_validator(self.config)
+        logger.info("Data validation enabled")
+                
         logger.info("Pipeline initialized with feature toggles")
         self._log_feature_status()
     
