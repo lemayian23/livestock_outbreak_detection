@@ -1,0 +1,15 @@
+# Minimal requirements to get started
+numpy
+pandas
+scikit-learn
+scipy
+SQLAlchemy
+matplotlib
+Flask
+PyYAML
+joblib
+setuptools
+wheel
+
+cryptography>=41.0.0
+pyyaml>=6.0
