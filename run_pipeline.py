@@ -10,7 +10,7 @@ import os
 # Add src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 
-from utils.config import load_config
+from config_manager.manager import get_config_manager
 from utils.feature_manager import get_feature_manager, FeatureDisabledError
 from data_collection.ingestion import DataCollector
 from data_quality.analyzer import DataQualityAnalyzer
@@ -34,9 +34,22 @@ logger = logging.getLogger(__name__)
 
 
 class FeatureAwarePipeline:
-    """
-    Pipeline that respects feature toggles
-    """
+    def __init__(self, config_path: str = "config/settings.yaml", env: str = None):
+        # Get config manager
+        self.config_manager = get_config_manager("config", env)
+        self.config = self.config_manager.config
+        
+        # Get environment info
+        from config_manager.environments import get_environment_manager
+        self.env_manager = get_environment_manager()
+        
+        # Get secrets manager
+        from config_manager.secrets import get_secrets_manager
+        self.secrets_manager = get_secrets_manager()
+        
+        # Rest of initialization...
+        
+        logger.info(f"Pipeline initialized for {self.env_manager.current_env.value} environment")
     
     def __init__(self, config_path: str = "config/settings.yaml"):
         """Initialize pipeline with configuration"""
