@@ -237,4 +237,126 @@ class EnvironmentManager:
                 "port": 443,
                 "cors_origins": ["https://production.example.com"]
             },
-            "features
+            "features": {
+                "enable_experimental": False,
+                "enable_debug_endpoints": False
+            },
+            "security": {
+                "require_https": True,
+                "rate_limit": True,
+                "enable_firewall": True
+            }
+        }
+        
+        # Demo environment
+        self.env_configs[Environment.DEMO] = {
+            "debug": False,
+            "log_level": "INFO",
+            "database": {
+                "host": "demo-db.example.com",
+                "port": 5432,
+                "name": "livestock_demo"
+            },
+            "api": {
+                "port": 8080,
+                "cors_origins": ["https://demo.example.com"]
+            },
+            "features": {
+                "enable_experimental": False,
+                "enable_debug_endpoints": True
+            }
+        }
+    
+    def get_config(self, env: Optional[Environment] = None) -> Dict:
+        """Get configuration for environment"""
+        if env is None:
+            env = self.current_env
+        
+        return self.env_configs.get(env, {}).copy()
+    
+    def get_feature_flags(self, env: Optional[Environment] = None) -> Dict:
+        """Get feature flags for environment"""
+        config = self.get_config(env)
+        return config.get("features", {}).copy()
+    
+    def is_feature_enabled(self, feature: str, env: Optional[Environment] = None) -> bool:
+        """Check if a feature is enabled in environment"""
+        features = self.get_feature_flags(env)
+        return features.get(feature, False)
+    
+    def get_security_config(self, env: Optional[Environment] = None) -> Dict:
+        """Get security configuration for environment"""
+        config = self.get_config(env)
+        return config.get("security", {}).copy()
+    
+    def get_database_config(self, env: Optional[Environment] = None) -> Dict:
+        """Get database configuration for environment"""
+        config = self.get_config(env)
+        return config.get("database", {}).copy()
+    
+    def get_api_config(self, env: Optional[Environment] = None) -> Dict:
+        """Get API configuration for environment"""
+        config = self.get_config(env)
+        return config.get("api", {}).copy()
+    
+    def get_environment_summary(self) -> Dict:
+        """Get summary of current environment"""
+        return {
+            "environment": self.current_env.value,
+            "hostname": self.env_info.hostname,
+            "os": self.env_info.os,
+            "python_version": self.env_info.python_version,
+            "is_container": self.env_info.is_container,
+            "is_cloud": self.env_info.is_cloud,
+            "metadata": self.env_info.metadata
+        }
+    
+    def validate_environment(self) -> bool:
+        """Validate current environment configuration"""
+        errors = []
+        
+        # Check environment variables based on environment
+        if self.current_env == Environment.PRODUCTION:
+            required_vars = ["SECRET_KEY", "DATABASE_URL"]
+            for var in required_vars:
+                if var not in os.environ:
+                    errors.append(f"Missing required environment variable for production: {var}")
+        
+        # Check security settings
+        if self.current_env == Environment.PRODUCTION:
+            config = self.get_config()
+            security = config.get("security", {})
+            if not security.get("require_https", False):
+                errors.append("Production environment should require HTTPS")
+        
+        if errors:
+            logger.error(f"Environment validation failed: {errors}")
+            return False
+        
+        logger.info("Environment validation passed")
+        return True
+    
+    def switch_environment(self, new_env: Environment) -> bool:
+        """Switch to a different environment"""
+        old_env = self.current_env
+        self.current_env = new_env
+        
+        # Update environment info
+        self.env_info.name = new_env
+        
+        logger.info(f"Switched environment from {old_env.value} to {new_env.value}")
+        return True
+
+
+# Global environment manager instance
+_environment_manager: Optional[EnvironmentManager] = None
+
+
+def get_environment_manager() -> EnvironmentManager:
+    """Get or create the global environment manager"""
+    global _environment_manager
+    
+    if _environment_manager is None:
+        _environment_manager = EnvironmentManager()
+    
+    return _environment_manager
