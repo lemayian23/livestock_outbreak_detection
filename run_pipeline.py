@@ -327,6 +327,34 @@ def main():
     
     # Run pipeline
     pipeline = FeatureAwarePipeline(args.config)
+
+    # Step 1.5: Data validation (if enabled)
+if self.data_validator and self.feature_manager.is_enabled('data_quality'):
+    logger.info("Validating data...")
+    
+    schema_name = self.config.get('validation', {}).get('required_schema', 'daily_health_metrics')
+    
+    validation_report = self.data_validator.validate_with_schema(schema_name, data)
+    results['validation_report'] = validation_report
+    
+    # Check if data is valid
+    if not validation_report['is_valid']:
+        if self.config.get('validation', {}).get('strict_mode', False):
+            logger.error("Data validation failed in strict mode. Aborting pipeline.")
+            results['errors'].append("Data validation failed")
+            results['success'] = False
+            return results
+        else:
+            logger.warning("Data validation failed, but continuing in non-strict mode")
+            results['warnings'].append("Data validation failed")
+    
+    # Generate quality report
+    quality_report = self.data_validator.create_data_quality_report(data, schema_name)
+    results['quality_report'] = quality_report
+    
+    logger.info(f"Data quality score: {quality_report['quality_score']:.3f}")
+    
+    results['features_used'].append('data_validation')
     pipeline.initialize_components()
     
     print(f"\nRunning pipeline with {len(pipeline.feature_manager.get_enabled_features())} enabled features")
