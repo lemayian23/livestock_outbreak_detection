@@ -1,0 +1,53 @@
+# Feature flags configuration
+
+# Core features
+core:
+  data_pipeline: true
+  anomaly_detection: true
+  alerting: true
+  reporting: true
+
+# Module features
+modules:
+  data_collection:
+    enabled: true
+    batch_size: 1000
+    interval_minutes: 5
+    
+  data_validation:
+    enabled: true
+    strict_mode: false
+    auto_fix: true
+    
+  anomaly_detection:
+    enabled: true
+    algorithms:
+      - "isolation_forest"
+      - "statistical"
+      - "seasonal"
+    ensemble_weighting: "adaptive"
+    
+  notification:
+    enabled: true
+    channels:
+      email: true
+      sms: false
+      webhook: true
+    rate_limit_per_hour: 10
+    
+  dashboard:
+    enabled: true
+    auto_refresh: true
+    cache_ttl_seconds: 300
+
+# Experimental features (not production-ready)
+experimental:
+  real_time_streaming: false
+  machine_learning_boost: false
+  predictive_analytics: false
+  
+# A/B testing features
+ab_testing:
+  new_algorithm: false
+  new_ui: false
+  percentage: 10
