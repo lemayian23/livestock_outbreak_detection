@@ -252,4 +252,117 @@ class LogCLI:
 def main():
     parser = argparse.ArgumentParser(
         description='Livestock Outbreak Detection - Log Management Tool',
-        formatter_class=
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  %(prog.py recent                        Show recent logs
+  %(prog.py recent --count 50             Show 50 recent logs
+  %(prog.py errors                        Show error logs
+  %(prog.py errors --hours 48             Show errors from last 48 hours
+  %(prog.py performance                   Show performance metrics
+  %(prog.py summary                       Show log summary
+  %(prog.py search "database"             Search for "database" in logs
+  %(prog.py export logs.json              Export logs to JSON
+  %(prog.py cleanup --days 7              Clean up logs older than 7 days
+  %(prog.py test                          Generate test log entries
+        """
+    )
+    
+    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
+    
+    # Recent command
+    recent_parser = subparsers.add_parser('recent', help='Show recent logs')
+    recent_parser.add_argument('--count', type=int, default=20,
+                              help='Number of logs to show (default: 20)')
+    recent_parser.add_argument('--level', help='Filter by log level')
+    recent_parser.add_argument('--json', action='store_true',
+                              help='Output in JSON format')
+    
+    # Errors command
+    errors_parser = subparsers.add_parser('errors', help='Show error logs')
+    errors_parser.add_argument('--hours', type=int, default=24,
+                              help='Hours to look back (default: 24)')
+    errors_parser.add_argument('--json', action='store_true',
+                              help='Output in JSON format')
+    
+    # Performance command
+    perf_parser = subparsers.add_parser('performance', help='Show performance metrics')
+    perf_parser.add_argument('--hours', type=int, default=1,
+                            help='Hours to analyze (default: 1)')
+    perf_parser.add_argument('--json', action='store_true',
+                            help='Output in JSON format')
+    
+    # Summary command
+    summary_parser = subparsers.add_parser('summary', help='Show log summary')
+    summary_parser.add_argument('--hours', type=int, default=1,
+                               help='Hours to summarize (default: 1)')
+    summary_parser.add_argument('--json', action='store_true',
+                               help='Output in JSON format')
+    
+    # Search command
+    search_parser = subparsers.add_parser('search', help='Search logs')
+    search_parser.add_argument('query', help='Search query')
+    search_parser.add_argument('--hours', type=int, default=24,
+                              help='Hours to search (default: 24)')
+    search_parser.add_argument('--json', action='store_true',
+                              help='Output in JSON format')
+    
+    # Export command
+    export_parser = subparsers.add_parser('export', help='Export logs')
+    export_parser.add_argument('output_file', help='Output file')
+    export_parser.add_argument('--hours', type=int, default=24,
+                              help='Hours to export (default: 24)')
+    export_parser.add_argument('--format', choices=['json', 'csv'], default='json',
+                              help='Export format')
+    
+    # Cleanup command
+    cleanup_parser = subparsers.add_parser('cleanup', help='Clean up old logs')
+    cleanup_parser.add_argument('--days', type=int, default=30,
+                               help='Delete logs older than N days (default: 30)')
+    cleanup_parser.add_argument('--dry-run', action='store_true',
+                               help='Show what would be deleted without deleting')
+    
+    # Test command
+    subparsers.add_parser('test', help='Generate test log entries')
+    
+    # Global arguments
+    parser.add_argument('--log-dir', default='logs',
+                       help='Log directory (default: logs)')
+    
+    args = parser.parse_args()
+    
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
+    
+    # Initialize CLI
+    cli = LogCLI(args.log_dir)
+    
+    # Execute command
+    if args.command == 'recent':
+        cli.show_recent(args.count, args.level, args.json)
+        
+    elif args.command == 'errors':
+        cli.show_errors(args.hours, args.json)
+        
+    elif args.command == 'performance':
+        cli.performance(args.hours, args.json)
+        
+    elif args.command == 'summary':
+        cli.summary(args.hours, args.json)
+        
+    elif args.command == 'search':
+        cli.search(args.query, args.hours, args.json)
+        
+    elif args.command == 'export':
+        cli.export(args.output_file, args.hours, args.format)
+        
+    elif args.command == 'cleanup':
+        cli.cleanup(args.days, args.dry_run)
+        
+    elif args.command == 'test':
+        cli.test_logging()
+
+
+if __name__ == "__main__":
+    main()
