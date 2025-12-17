@@ -2,21 +2,18 @@
 Structured JSON logger with rotation and context management
 """
 import json
+import logging
 import sys
 import os
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, Tuple, Callable
 from pathlib import Path
 from datetime import datetime
 from enum import Enum
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 import threading
 from contextvars import ContextVar
 import traceback
 import inspect
-
-# Import standard logging with alias to avoid confusion
-import logging as std_logging
-from std_logging import handlers
 
 # Context variable for log context
 log_context_var = ContextVar('log_context', default={})
@@ -66,10 +63,10 @@ class LogContext:
                 self.additional_context[key] = value
 
 
-class JSONFormatter(std_logging.Formatter):
+class JSONFormatter(logging.Formatter):
     """JSON formatter for structured logging"""
     
-    def format(self, record: std_logging.LogRecord) -> str:
+    def format(self, record: logging.LogRecord) -> str:
         """Format log record as JSON"""
         log_data = {
             'timestamp': datetime.utcnow().isoformat() + 'Z',
@@ -112,7 +109,7 @@ class StructuredLogger:
     def __init__(self, name: str = "livestock", config: Optional[Dict] = None):
         self.name = name
         self.config = config or {}
-        console_handler = std_logging.StreamHandler(sys.stdout)
+        self.logger = logging.getLogger(name)
         self._setup_logger()
         
         # Thread-local storage for context
