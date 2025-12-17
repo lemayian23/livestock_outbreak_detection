@@ -18,11 +18,11 @@ from logging.structured_logger import get_structured_logger, setup_logging
 from logging.log_analyzer import get_log_analyzer
 
 # Set up logging for the tool itself
-logging.basicConfig(
-    level=logging.INFO,
+std_logging.basicConfig(
+    level=std_logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger(__name__)
+logger = std_logging.getLogger(__name__)
 
 
 class LogCLI:
