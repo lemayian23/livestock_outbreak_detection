@@ -2,9 +2,6 @@
 Structured JSON logger with rotation and context management
 """
 import json
-import logging
-import logging as std_logging
-from std_logging import handlers
 import sys
 import os
 from typing import Dict, Any, Optional, Union
@@ -16,6 +13,10 @@ import threading
 from contextvars import ContextVar
 import traceback
 import inspect
+
+# Import standard logging with alias to avoid confusion
+import logging as std_logging
+from std_logging import handlers
 
 # Context variable for log context
 log_context_var = ContextVar('log_context', default={})
