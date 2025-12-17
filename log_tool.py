@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
-#!/usr/bin/env python3
 """
 Log management and analysis CLI tool
 """
 import argparse
-import logging
 import sys
 import os
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-#CRITICAL :
+# Add src to path BEFORE any imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from logging.structured_logger import get_structured_logger, setup_logging
-from logging.log_analyzer import get_log_analyzer
+# Now import your CUSTOM logging module
+from custom_logging.structured_logger import get_structured_logger, setup_logging
+from custom_logging.log_analyzer import get_log_analyzer
+
+# Import Python's built-in logging separately
+import logging as std_logging
 
 # Set up logging for the tool itself
 std_logging.basicConfig(
@@ -165,9 +167,6 @@ class LogCLI:
         """Clean up old log files"""
         if dry_run:
             print(f"Dry run: Would clean up logs older than {days} days")
-            # Create a test analyzer with the same directory
-            analyzer = get_log_analyzer(str(self.log_dir))
-            
             # List files that would be deleted
             for log_file in self.log_dir.glob("*.log.*"):
                 print(f"  Would consider: {log_file.name}")
@@ -256,16 +255,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog.py recent                        Show recent logs
-  %(prog.py recent --count 50             Show 50 recent logs
-  %(prog.py errors                        Show error logs
-  %(prog.py errors --hours 48             Show errors from last 48 hours
-  %(prog.py performance                   Show performance metrics
-  %(prog.py summary                       Show log summary
-  %(prog.py search "database"             Search for "database" in logs
-  %(prog.py export logs.json              Export logs to JSON
-  %(prog.py cleanup --days 7              Clean up logs older than 7 days
-  %(prog.py test                          Generate test log entries
+  %(prog)s recent                        Show recent logs
+  %(prog)s recent --count 50             Show 50 recent logs
+  %(prog)s errors                        Show error logs
+  %(prog)s errors --hours 48             Show errors from last 48 hours
+  %(prog)s performance                   Show performance metrics
+  %(prog)s summary                       Show log summary
+  %(prog)s search "database"             Search for "database" in logs
+  %(prog)s export logs.json              Export logs to JSON
+  %(prog)s cleanup --days 7              Clean up logs older than 7 days
+  %(prog)s test                          Generate test log entries
         """
     )
     
