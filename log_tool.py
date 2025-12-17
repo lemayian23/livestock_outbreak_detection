@@ -20,11 +20,11 @@ from custom_logging.log_analyzer import get_log_analyzer
 import logging
 
 # Set up logging for the tool itself
-std_logging.basicConfig(
-    level=std_logging.INFO,
+logging.basicConfig(
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = std_logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class LogCLI:
