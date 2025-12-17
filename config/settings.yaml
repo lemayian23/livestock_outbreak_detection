@@ -3,6 +3,39 @@ app:
   version: "1.0.0"
   offline_mode: true
 
+
+# Logging configuration
+logging:
+  # Output format
+  json_format: false  # Set to true for JSON structured logs
+  level: "INFO"      # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  
+  # File logging
+  file_enabled: true
+  log_dir: "logs"
+  max_file_size: 10485760  # 10MB in bytes
+  backup_count: 5
+  separate_error_log: true
+  
+  # Console logging
+  console_enabled: true
+  
+  # Performance logging
+  enable_performance_logging: true
+  slow_threshold_ms: 1000  # Log operations slower than this
+  
+  # Context logging
+  include_caller_info: true
+  include_context: true
+  
+  # Special loggers
+  loggers:
+    livestock: "INFO"
+    data_collection: "DEBUG"
+    anomaly_detection: "INFO"
+    database: "WARNING"
+
+
 database:
   path: "./data/livestock.db"
   type: "sqlite"
