@@ -25,12 +25,15 @@ from visualization.dashboard import Dashboard
 from data_validation.validator import get_data_validator
 from data_validation.schema import get_schema_registry
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# Replace old logging setup at the top:
+
+logger = get_structured_logger()
+
+# Set context for pipeline
+logger.set_context(
+    component="pipeline",
+    operation="livestock_outbreak_detection"
 )
-logger = logging.getLogger(__name__)
 
 
 class FeatureAwarePipeline:
