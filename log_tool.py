@@ -11,8 +11,8 @@ import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Add src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+#CRITICAL :
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from logging.structured_logger import get_structured_logger, setup_logging
 from logging.log_analyzer import get_log_analyzer
