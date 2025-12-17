@@ -16,8 +16,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from custom_logging.structured_logger import get_structured_logger, setup_logging
 from custom_logging.log_analyzer import get_log_analyzer
 
-# Import Python's built-in logging separately
-import logging as std_logging
+# Import Python's built-in logging module
+import logging
 
 # Set up logging for the tool itself
 std_logging.basicConfig(
