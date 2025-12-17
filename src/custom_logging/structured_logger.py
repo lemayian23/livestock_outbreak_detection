@@ -66,10 +66,10 @@ class LogContext:
                 self.additional_context[key] = value
 
 
-class JSONFormatter(logging.Formatter):
+class JSONFormatter(std_logging.Formatter):
     """JSON formatter for structured logging"""
     
-    def format(self, record: logging.LogRecord) -> str:
+    def format(self, record: std_logging.LogRecord) -> str:
         """Format log record as JSON"""
         log_data = {
             'timestamp': datetime.utcnow().isoformat() + 'Z',
@@ -112,7 +112,7 @@ class StructuredLogger:
     def __init__(self, name: str = "livestock", config: Optional[Dict] = None):
         self.name = name
         self.config = config or {}
-        self.logger = logging.getLogger(name)
+        console_handler = std_logging.StreamHandler(sys.stdout)
         self._setup_logger()
         
         # Thread-local storage for context

@@ -8,11 +8,13 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import gzip
 from collections import Counter, defaultdict
-import logging
 
-logger = logging.getLogger(__name__)
+# Import with alias
+import logging as std_logging
 
+logger = std_logging.getLogger(__name__)
 
+                   
 class LogAnalyzer:
     """Analyze log files for patterns, errors, and statistics"""
     
