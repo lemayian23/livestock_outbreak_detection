@@ -3,7 +3,8 @@ Structured JSON logger with rotation and context management
 """
 import json
 import logging
-import logging.handlers
+import logging as std_logging
+from std_logging import handlers
 import sys
 import os
 from typing import Dict, Any, Optional, Union
