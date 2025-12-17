@@ -9,8 +9,7 @@ import os
 
 #i have added src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
-
-from logging.structured_logger import get_structured_logger, LogContext
+from custom_logging.structured_logger import get_structured_logger, LogContext
 from utils.feature_manager import get_feature_manager, FeatureDisabledError
 from data_collection.ingestion import DataCollector
 from data_quality.analyzer import DataQualityAnalyzer
@@ -25,7 +24,6 @@ from visualization.dashboard import Dashboard
 from data_validation.validator import get_data_validator
 from data_validation.schema import get_schema_registry
 
-# Replace old logging setup at the top:
 
 logger = get_structured_logger()
 
