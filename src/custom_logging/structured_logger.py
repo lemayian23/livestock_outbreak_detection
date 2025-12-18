@@ -69,7 +69,7 @@ class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Format log record as JSON"""
         log_data = {
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
+            'timestamp': datetime.now(datetime.timezone.utc).isoformat().replace('+00:00', 'Z'),
             'level': record.levelname,
             'logger': record.name,
             'message': record.getMessage(),
@@ -198,13 +198,18 @@ class StructuredLogger:
         """Log warning message with context"""
         self._log(logging.WARNING, message, **kwargs)
     
-    def error(self, message: str, exc_info: Optional[Exception] = None, **kwargs) -> None:
-        """Log error message with context and optional exception"""
-        self._error_count += 1
-        
-        if exc_info:
-            kwargs['exc_info'] = exc_info
-        
+    def error(self, message: str, exception: Optional[Exception] = None, **kwargs) -> None:
+    """Log error message with context and optional exception"""
+    self._error_count += 1
+    
+    # Store exception in kwargs for JSON formatting
+    if exception:
+        kwargs['exception'] = exception
+    
+    # Log with exc_info parameter for standard logging
+    if exception:
+        self.logger.error(message, exc_info=exception, extra=kwargs)
+    else:
         self._log(logging.ERROR, message, **kwargs)
     
     def critical(self, message: str, **kwargs) -> None:
