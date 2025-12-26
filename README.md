@@ -12,7 +12,7 @@ An offline system for detecting disease outbreaks in rural livestock using anoma
 - Data simulation for testing
 -Data cleaning and validation
 -Detection feature
-
+-Isolation forest feat for data analysis
 ## Installation
 
 ```bash
