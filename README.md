@@ -14,6 +14,7 @@ An offline system for detecting disease outbreaks in rural livestock using anoma
 -Detection feature
 -Isolation forest feat for data analysis
 -Seasonal pattern handling and decomposition
+-Ensemble anomaly detection combining multiple methods
 ## Installation
 
 ```bash
