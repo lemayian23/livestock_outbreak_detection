@@ -11,11 +11,13 @@ An offline system for detecting disease outbreaks in rural livestock using anoma
 - Simple web dashboard
 - SQLite database for data storage
 - Data simulation for testing
--Data cleaning and validation
--Detection feature
--Isolation forest feat for data analysis
--Seasonal pattern handling and decomposition
--Ensemble anomaly detection combining multiple methods
+  -Data cleaning and validation
+  -Detection feature
+  -Isolation forest feat for data analysis
+  -Seasonal pattern handling and decomposition
+  -Ensemble anomaly detection combining multiple methods
+  Seasonal pattern handling and decomposition feature.
+
 ## Installation
 
 ```bash
