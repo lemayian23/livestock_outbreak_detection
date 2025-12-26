@@ -5,6 +5,7 @@ An offline system for detecting disease outbreaks in rural livestock using anoma
 ## Features
 
 - Offline-first architecture (no internet required)
+- Main anomaly detection orchestrator
 - Statistical anomaly detection
 - Outbreak cluster identification
 - Simple web dashboard
