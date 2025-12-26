@@ -10,6 +10,7 @@ An offline system for detecting disease outbreaks in rural livestock using anoma
 - Simple web dashboard
 - SQLite database for data storage
 - Data simulation for testing
+-Data cleaning and validation
 
 ## Installation
 
