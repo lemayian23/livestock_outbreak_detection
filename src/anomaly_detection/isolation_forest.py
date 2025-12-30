@@ -265,7 +265,7 @@ class IsolationForestDetector:
                 avg_contribution = anomaly_group[contribution_col].mean()
                 feature_contributions[feature] = avg_contribution
         
-        # Sort by contribution (descending)
+        # Sort by contribution by descending order
         sorted_features = sorted(feature_contributions.items(), 
                                 key=lambda x: x[1], 
                                 reverse=True)
