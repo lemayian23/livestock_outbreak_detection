@@ -12,7 +12,7 @@ import os
 
 
 class IsolationForestDetector:
-    """Isolation Forest based anomaly detection"""
+    """Isolation Forest anomaly detection"""
     
     def __init__(self, 
                  contamination: float = 0.1,
