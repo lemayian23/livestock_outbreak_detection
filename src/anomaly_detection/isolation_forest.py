@@ -337,5 +337,6 @@ class IsolationForestDetector:
             
             return importances
         except:
-            # Fallback to equal importance
+            # fallback for feature importance purposes"
+
             return {feature: 1.0/len(self.feature_cols) for feature in self.feature_cols}
