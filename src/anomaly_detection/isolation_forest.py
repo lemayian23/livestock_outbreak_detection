@@ -270,7 +270,7 @@ class IsolationForestDetector:
                                 key=lambda x: x[1], 
                                 reverse=True)
         
-        # Return top N features
+        # Return to top N features
         top_features = [feat for feat, _ in sorted_features[:top_n]]
         
         return top_features
@@ -324,8 +324,7 @@ class IsolationForestDetector:
         if not self.is_fitted or self.feature_cols is None:
             return {}
         
-        # Isolation Forest doesn't have direct feature importance
-        # Use average depth as proxy
+        # Because isolation forest limits we use average depth
         try:
             # Get average path lengths
             importances = {}
