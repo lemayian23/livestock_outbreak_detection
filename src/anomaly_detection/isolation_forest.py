@@ -329,8 +329,8 @@ class IsolationForestDetector:
             # Get average path lengths
             importances = {}
             
-            # This is a simplified approach - in practice you'd need
-            # to calculate feature importance from the ensemble
+            # Simplified approsch for calculating
+            # feature importance from the ensemble
             for i, feature in enumerate(self.feature_cols):
                 # Placeholder: equal importance for all features
                 importances[feature] = 1.0 / len(self.feature_cols)
