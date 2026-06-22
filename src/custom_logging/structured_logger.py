@@ -202,13 +202,20 @@ class StructuredLogger:
     """Log error message with context and optional exception"""
     self._error_count += 1
     
-    # Store exception in kwargs for JSON formatting
+    # Store exception separately for JSON formatting
+    exc_to_log = None
     if exception:
-        kwargs['exception'] = exception
+        exc_to_log = exception
     
-    # Log with exc_info parameter for standard logging
+    # Use a different key to avoid conflict with logging's exc_info
+    if 'exception_object' not in kwargs and exception:
+        kwargs['exception_object'] = exception
+    
+    # Log with exc_info for standard logging traceback
     if exception:
-        self.logger.error(message, exc_info=exception, extra=kwargs)
+        # Remove exception_object from extra since we're using exc_info
+        kwargs_without_exc = {k: v for k, v in kwargs.items() if k != 'exception_object'}
+        self.logger.error(message, exc_info=exception, extra=kwargs_without_exc)
     else:
         self._log(logging.ERROR, message, **kwargs)
     
