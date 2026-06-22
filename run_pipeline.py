@@ -7,7 +7,7 @@ from typing import Dict, Any
 import sys
 import os
 
-#i have added src to path
+# I have added src to path
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
 from custom_logging.structured_logger import get_structured_logger, LogContext
 from utils.feature_manager import get_feature_manager, FeatureDisabledError
@@ -197,6 +197,31 @@ class FeatureAwarePipeline:
                 anomalies = self.components['detector'].detect(data)
                 results['anomalies'] = anomalies
                 results['features_used'].append('anomaly_detection')
+
+            # Add after anomaly detection section
+            if self.feature_manager.is_enabled('export_reports'):
+                from reporting.generator import get_report_generator
+                
+                report_gen = get_report_generator()
+                
+                # Prepare metadata
+                metadata = {
+                    'Pipeline Version': '1.0',
+                    'Environment': self.env_manager.current_env.value if hasattr(self, 'env_manager') else 'unknown',
+                    'Detection Algorithms': 'Isolation Forest, Statistical',
+                    'Total Records': len(data) if data is not None else 0
+                }
+                
+                # Generate report
+                report_path = report_gen.generate_html_report(
+                    data=data,
+                    anomalies=anomalies if anomalies else [],
+                    metadata=metadata,
+                    title=f"Anomaly Detection Report - {datetime.now().strftime('%Y-%m-%d')}"
+                )
+                
+                results['report_path'] = report_path
+                logger.info(f"Report generated: {report_path}")
             
             # Step 5: Ensemble detection (if enabled)
             if (self.feature_manager.is_enabled('ensemble_detection') and 
