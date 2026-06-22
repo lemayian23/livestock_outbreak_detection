@@ -177,37 +177,37 @@ class LogCLI:
                 print(f"  - {file}")
     
     def test_logging(self, count: int = 5) -> None:
-        """Test logging by generating test log entries"""
-        test_logger = get_structured_logger()
-        
-        print(f"Generating {count} test log entries...")
-        
-        # Set some context
-        test_logger.set_context(
-            request_id="test-123",
-            component="log_tool",
-            operation="test_logging"
-        )
-        
-        # Generate test logs
-        for i in range(count):
-            test_logger.debug(f"Test debug message {i}", iteration=i)
-            test_logger.info(f"Test info message {i}", iteration=i)
-            test_logger.warning(f"Test warning message {i}", iteration=i)
-        
-        # Test error logging
-        try:
-            raise ValueError("Test exception for logging")
-        except ValueError as e:
-            test_logger.error(f"Test error message", exc_info=e)
-        
-        # Test timing
-        with test_logger.timer("test_operation"):
-            import time
-            time.sleep(0.1)
-        
-        print(f"Generated {count * 3 + 2} test log entries")
-        print(f"Logs written to: {self.log_dir}/")
+    """Test logging by generating test log entries"""
+    test_logger = get_structured_logger()
+    
+    print(f"Generating {count} test log entries...")
+    
+    # Set some context
+    test_logger.set_context(
+        request_id="test-123",
+        component="log_tool",
+        operation="test_logging"
+    )
+    
+    # Generate test logs
+    for i in range(count):
+        test_logger.debug(f"Test debug message {i}", iteration=i)
+        test_logger.info(f"Test info message {i}", iteration=i)
+        test_logger.warning(f"Test warning message {i}", iteration=i)
+    
+    # Test error logging - USE 'exception' NOT 'exc_info'
+    try:
+        raise ValueError("Test exception for logging")
+    except ValueError as e:
+        test_logger.error(f"Test error message", exception=e)
+    
+    # Test timing
+    with test_logger.timer("test_operation"):
+        import time
+        time.sleep(0.1)
+    
+    print(f"Generated {count * 3 + 2} test log entries")
+    print(f"Logs written to: {self.log_dir}/")
     
     def _print_log_entry(self, log: dict, show_context: bool = True) -> None:
         """Print a single log entry in readable format"""

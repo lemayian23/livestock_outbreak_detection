@@ -82,7 +82,7 @@ class JSONFormatter(logging.Formatter):
         }
         
         # Add exception info if present
-        if record_exc_info:
+        if record.exc_info:
             log_data['exception'] = {
                 'type': record.exc_info[0].__name__ if record.exc_info[0] else None,
                 'message': str(record.exc_info[1]) if record.exc_info[1] else None,
@@ -90,7 +90,7 @@ class JSONFormatter(logging.Formatter):
             }
         elif hasattr(record, 'exception_object') and record.exception_object:
             # Handle our custom exception_object
-            exc = record.execption_object
+            exc = record.exception_object
             log_data['exception'] = {
                 'type': type(exc).__name__,
                 'message': str(exc),
