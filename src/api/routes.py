@@ -62,27 +62,57 @@ def health(request: Request):
     tags=["detection"],
     dependencies=[Depends(require_api_key)],
 )
-def detect(payload: DetectRequest, pipeline=Depends(get_pipeline)):
+@router.post(
+    "/v1/detect",
+    response_model=DetectResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["detection"],
+)
+def detect(
+    payload: DetectRequest,
+    pipeline=Depends(get_pipeline),
+    db=Depends(get_db_dep),
+    current_user=Depends(get_optional_user),
+):
     """Run the full anomaly detection pipeline on submitted records."""
-    run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    import uuid
+    import json as _json
+    from datetime import datetime as _dt, timezone as _tz
+    from .models import Run, Anomaly
+
+    run_id = f"run_{_dt.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
     start = time.perf_counter()
 
     logger.set_context(run_id=run_id)
     logger.info(f"Received detect request: {len(payload.records)} records")
 
-    # Convert records to DataFrame
     df = pd.DataFrame([r.model_dump() for r in payload.records])
 
-    # Run the pipeline
+    db_run = None
+    if current_user is not None:
+        db_run = Run(
+            user_id=current_user.id,
+            status="running",
+            records_submitted=len(payload.records),
+        )
+        db.add(db_run)
+        db.commit()
+        db.refresh(db_run)
+
     try:
         results = pipeline.run(input_data=df)
     except Exception as e:
         logger.error(f"Pipeline failed for run {run_id}", exception=e)
+        if db_run:
+            db_run.status = "failed"
+            db_run.error_message = str(e)[:1000]
+            db_run.completed_at = _dt.now(_tz.utc)
+            db.commit()
         raise
 
     duration_ms = (time.perf_counter() - start) * 1000
-
     anomalies_raw = results.get("anomalies", []) or []
+
     anomalies: List[AnomalyOut] = []
     for a in anomalies_raw:
         anomalies.append(
@@ -101,6 +131,28 @@ def detect(payload: DetectRequest, pipeline=Depends(get_pipeline)):
     if isinstance(qr, dict):
         quality_score = qr.get("quality_score")
 
+    if db_run is not None:
+        db_run.status = "success" if results.get("success") else "failed"
+        db_run.records_processed = len(df)
+        db_run.anomalies_detected = len(anomalies)
+        db_run.quality_score = quality_score
+        db_run.duration_ms = round(duration_ms, 2)
+        db_run.completed_at = _dt.now(_tz.utc)
+        db.commit()
+
+        for a in anomalies:
+            db.add(Anomaly(
+                run_id=db_run.id,
+                farm_id=a.farm_id,
+                animal_type=a.animal_type,
+                date=a.date,
+                severity=a.severity,
+                score=a.score,
+                description=a.description,
+                raw_json=_json.dumps(a.model_dump(), default=str),
+            ))
+        db.commit()
+
     response = DetectResponse(
         run_id=run_id,
         success=bool(results.get("success", False)),
@@ -115,9 +167,7 @@ def detect(payload: DetectRequest, pipeline=Depends(get_pipeline)):
         features_used=results.get("features_used", []) or [],
     )
 
-    logger.info(
-        f"Completed run {run_id}: {response.anomalies_detected} anomalies in {response.duration_ms}ms"
-    )
+    logger.info(f"Completed run {run_id}: {response.anomalies_detected} anomalies")
     logger.clear_context()
     return response
 

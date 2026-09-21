@@ -64,3 +64,11 @@ htmlcov/
 
 # Docker
 *.log
+
+# Local dev database
+local_dev.db
+*.db
+*.sqlite3
+
+# Alembic
+__pycache__/
