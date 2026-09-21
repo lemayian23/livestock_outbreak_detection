@@ -112,17 +112,12 @@ class TestConfigManager:
         manager.validate()
     
     def test_validation_failure(self):
-        """Test configuration validation failure"""
         manager = ConfigManager(str(self.config_dir))
-        
-        # Create invalid config (empty database)
-        manager.configs["base"] = ConfigSection(
-            name="base",
-            data={"database": {}},
-            source=ConfigSource.FILE
-        )
+        # Explicitly blank out required fields so validation should fail
+        manager.set("database.host","", section="base")
+        manager.set("database.name", "", section="base")
+        manager.set("api.port", 999999, section="base")
         manager._merge_configurations()
-        
         with pytest.raises(ConfigValidationError):
             manager.validate()
     

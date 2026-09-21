@@ -1,414 +1,356 @@
 """
 Main pipeline runner with feature toggle support
 """
-import logging
-import yaml
-from typing import Dict, Any
 import sys
 import os
+from datetime import datetime
+from typing import Dict, Any, Optional
 
-# I have added src to path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
-from custom_logging.structured_logger import get_structured_logger, LogContext
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from custom_logging.structured_logger import get_structured_logger
+from utils.config import Config
 from utils.feature_manager import get_feature_manager, FeatureDisabledError
-from data_collection.ingestion import DataCollector
-from data_quality.analyzer import DataQualityAnalyzer
-from preprocessing.cleaner import DataCleaner
-from preprocessing.normalizer import DataNormalizer
-from anomaly_detection.detector import AnomalyDetector
-from anomaly_detection.ensemble import EnsembleDetector
-from notification.manager import NotificationManager
-from export.exporter import ReportExporter
-from visualization.dashboard import Dashboard
-
 from data_validation.validator import get_data_validator
-from data_validation.schema import get_schema_registry
 
 
 logger = get_structured_logger()
-
-# Set context for pipeline
-logger.set_context(
-    component="pipeline",
-    operation="livestock_outbreak_detection"
-)
+logger.set_context(component="pipeline", operation="livestock_outbreak_detection")
 
 
 class FeatureAwarePipeline:
-    def __init__(self, config_path: str = "config/settings.yaml", env: str = None):
-        # Get config manager
-        self.config_manager = get_config_manager("config", env)
-        self.config = self.config_manager.config
-        
-        # Get environment info
-        from config_manager.environments import get_environment_manager
-        self.env_manager = get_environment_manager()
-        
-        # Get secrets manager
-        from config_manager.secrets import get_secrets_manager
-        self.secrets_manager = get_secrets_manager()
-        
-        # Rest of initialization...
-        
-        logger.info(f"Pipeline initialized for {self.env_manager.current_env.value} environment")
-    
-    def __init__(self, config_path: str = "config/settings.yaml"):
-        """Initialize pipeline with configuration"""
-        self.config = load_config(config_path)
-        self.feature_manager = get_feature_manager(self.config)
-        self.components = {}
+    """Feature-aware pipeline that runs the full livestock detection flow."""
 
-        # Initialize data validator if enabled
+    def __init__(self, config_path: str = "config/settings.yaml", env: Optional[str] = None):
+        self.env = env or os.getenv("APP_ENV", "development")
+        self.config = Config(config_path)
+        self.feature_manager = get_feature_manager(self.config)
+        self.components: Dict[str, Any] = {}
+
+        # Optional validator
         self.data_validator = None
-        validation_config = self.config.get('validation', {})
-        if validation_config.get('enabled', False):
-        self.data_validator = get_data_validator(self.config)
-        logger.info("Data validation enabled")
-                
-        logger.info("Pipeline initialized with feature toggles")
+        if self.config.get('validation.enabled', False):
+            self.data_validator = get_data_validator(self.config)
+            logger.info("Data validation enabled")
+
+        logger.info(f"Pipeline initialized for {self.env} environment")
         self._log_feature_status()
-    
+
     def _log_feature_status(self) -> None:
-        """Log the status of all features"""
         status = self.feature_manager.get_feature_status()
         enabled = [name for name, info in status.items() if info['enabled']]
         disabled = [name for name, info in status.items() if not info['enabled']]
-        
         logger.info(f"Enabled features: {len(enabled)}")
         logger.info(f"Disabled features: {len(disabled)}")
-        
         if disabled:
             logger.debug(f"Disabled: {', '.join(disabled)}")
-    
+
     def initialize_components(self) -> None:
-        """Initialize pipeline components based on enabled features"""
-        
-        # Data collection
         if self.feature_manager.is_enabled('data_collection'):
-            from data_collection.ingestion import DataCollector
-            self.components['data_collector'] = DataCollector(self.config)
-            logger.info("Data collector initialized")
-        else:
-            logger.info("Data collection feature is disabled")
-        
-        # Data quality
+            from data_collection.ingestion import DataIngestor
+            self.components['data_ingestor'] = DataIngestor(None)
+            logger.info("Data ingestor initialized")
+
         if self.feature_manager.is_enabled('data_quality'):
             from data_quality.analyzer import DataQualityAnalyzer
-            self.components['data_quality'] = DataQualityAnalyzer(self.config)
+            self.components['data_quality'] = DataQualityAnalyzer()
             logger.info("Data quality analyzer initialized")
-        
-        # Preprocessing
+
         if self.feature_manager.is_enabled('preprocessing'):
             from preprocessing.cleaner import DataCleaner
-            from preprocessing.normalizer import DataNormalizer
+            from preprocessing.normalizer import FeatureNormalizer
             self.components['cleaner'] = DataCleaner(self.config)
-            self.components['normalizer'] = DataNormalizer(self.config)
+            self.components['normalizer'] = FeatureNormalizer(method='standard')
             logger.info("Preprocessing components initialized")
-        
-        # Anomaly detection
+
         if self.feature_manager.is_enabled('anomaly_detection'):
             from anomaly_detection.detector import AnomalyDetector
             self.components['detector'] = AnomalyDetector(self.config)
             logger.info("Anomaly detector initialized")
-        
-        # Ensemble detection
+
         if self.feature_manager.is_enabled('ensemble_detection'):
             from anomaly_detection.ensemble import EnsembleDetector
-            self.components['ensemble'] = EnsembleDetector(self.config)
+            self.components['ensemble'] = EnsembleDetector()
             logger.info("Ensemble detector initialized")
-        
-        # Notifications
+
         if self.feature_manager.is_enabled('notifications'):
             from notification.manager import NotificationManager
-            self.components['notifications'] = NotificationManager(self.config)
+            notification_config = self.config.get('notification', {}) or {}
+            self.components['notifications'] = NotificationManager(notification_config)
             logger.info("Notification manager initialized")
-        
-        # Export
+
         if self.feature_manager.is_enabled('export_reports'):
-            from export.exporter import ReportExporter
-            self.components['exporter'] = ReportExporter(self.config)
-            logger.info("Report exporter initialized")
-        
-        # Dashboard
+            from export.exporter import DataExporter
+            self.components['exporter'] = DataExporter()
+            logger.info("Data exporter initialized")
+
         if self.feature_manager.is_enabled('dashboard'):
-            from visualization.dashboard import Dashboard
-            self.components['dashboard'] = Dashboard(self.config)
+            from visualization.dashboard import HealthDashboard
+            self.components['dashboard'] = HealthDashboard()
             logger.info("Dashboard initialized")
-    
-    def run(self, input_data=None) -> Dict[str, Any]:
-        """
-        Run the pipeline with feature awareness
-        
-        Args:
-            input_data: Optional input data (if data_collection is disabled)
-            
-        Returns:
-            Dictionary with pipeline results
-        """
-        results = {
+
+    def _load_input_data(self, input_data: Optional[Any]):
+        if input_data is not None:
+            return input_data
+
+        csv_path = "data/raw/livestock_data.csv"
+        if not os.path.exists(csv_path):
+            raise FileNotFoundError(
+                f"No input_data and no file at {csv_path}. "
+                f"Run `python generate_data.py` first."
+            )
+        import pandas as pd
+        logger.info(f"Loading data from {csv_path}")
+        return pd.read_csv(csv_path)
+
+    def run(self, input_data: Optional[Any] = None) -> Dict[str, Any]:
+        results: Dict[str, Any] = {
             'success': False,
             'features_used': [],
             'warnings': [],
-            'errors': []
+            'errors': [],
         }
-        
+
         try:
-            # Step 1: Collect data (if enabled)
+            # 1. Load
             if self.feature_manager.is_enabled('data_collection'):
                 logger.info("Collecting data...")
-                data = self.components['data_collector'].collect()
+                data = self._load_input_data(input_data)
                 results['features_used'].append('data_collection')
             elif input_data is not None:
-                logger.info("Using provided input data")
                 data = input_data
+                results['features_used'].append('provided_input')
             else:
                 raise FeatureDisabledError(
                     "data_collection is disabled and no input data provided"
                 )
-            
-            # Step 2: Data quality checks (if enabled)
+
+            # 2. Validation
+            if self.data_validator and self.feature_manager.is_enabled('data_quality'):
+                logger.info("Validating data...")
+                schema_name = self.config.get(
+                    'validation.required_schema', 'daily_health_metrics'
+                )
+                validation_report = self.data_validator.validate_with_schema(
+                    schema_name, data
+                )
+                results['validation_report'] = validation_report
+
+                if not validation_report['is_valid']:
+                    strict = self.config.get('validation.strict_mode', False)
+                    if strict:
+                        logger.error("Validation failed (strict mode). Aborting.")
+                        results['errors'].append("Data validation failed")
+                        return results
+                    results['warnings'].append("Data validation failed")
+
+                quality_report = self.data_validator.create_data_quality_report(
+                    data, schema_name
+                )
+                results['quality_report'] = quality_report
+                logger.info(f"Data quality score: {quality_report['quality_score']:.3f}")
+                results['features_used'].append('data_validation')
+
+            # 3. Data quality
             if self.feature_manager.is_enabled('data_quality'):
                 logger.info("Running data quality checks...")
-                quality_report = self.components['data_quality'].analyze(data)
-                results['data_quality'] = quality_report
+                quality_analysis = self.components['data_quality'].analyze_dataframe(data)
+                results['data_quality'] = quality_analysis
+                if quality_analysis.get('issues'):
+                    results['warnings'].append(
+                        f"Data quality issues: {len(quality_analysis['issues'])}"
+                    )
                 results['features_used'].append('data_quality')
-                
-                # Log quality issues
-                if quality_report.get('has_issues', False):
-                    results['warnings'].append('Data quality issues detected')
-            
-            # Step 3: Preprocessing (if enabled)
+
+            # 4. Preprocess
             if self.feature_manager.is_enabled('preprocessing'):
                 logger.info("Preprocessing data...")
-                # Clean
                 if 'cleaner' in self.components:
-                    data = self.components['cleaner'].clean(data)
-                
-                # Normalize
+                    data = self.components['cleaner'].clean_dataframe(data)
                 if 'normalizer' in self.components:
-                    data = self.components['normalizer'].normalize(data)
-                
+                    metrics = [c for c in ['temperature', 'heart_rate', 'activity_level']
+                               if c in data.columns]
+                    if metrics:
+                        self.components['normalizer'].fit(data, metrics)
+                        data = self.components['normalizer'].transform(data, metrics)
                 results['features_used'].append('preprocessing')
-            
-            # Step 4: Anomaly detection (if enabled)
-            anomalies = None
+
+            # 5. Anomaly detection
+            anomalies_df = None
             if self.feature_manager.is_enabled('anomaly_detection'):
                 logger.info("Running anomaly detection...")
-                anomalies = self.components['detector'].detect(data)
-                results['anomalies'] = anomalies
+                anomalies_df = self.components['detector'].detect(data)
                 results['features_used'].append('anomaly_detection')
+                if anomalies_df is not None and 'is_anomaly' in anomalies_df.columns:
+                    anomaly_rows = anomalies_df[anomalies_df['is_anomaly']]
+                    results['anomalies'] = anomaly_rows.to_dict('records')
+                    logger.info(f"Detected {len(anomaly_rows)} anomalies")
 
-            # Add after anomaly detection section
-            if self.feature_manager.is_enabled('export_reports'):
-                from reporting.generator import get_report_generator
-                
-                report_gen = get_report_generator()
-                
-                # Prepare metadata
-                metadata = {
-                    'Pipeline Version': '1.0',
-                    'Environment': self.env_manager.current_env.value if hasattr(self, 'env_manager') else 'unknown',
-                    'Detection Algorithms': 'Isolation Forest, Statistical',
-                    'Total Records': len(data) if data is not None else 0
-                }
-                
-                # Generate report
-                report_path = report_gen.generate_html_report(
-                    data=data,
-                    anomalies=anomalies if anomalies else [],
-                    metadata=metadata,
-                    title=f"Anomaly Detection Report - {datetime.now().strftime('%Y-%m-%d')}"
-                )
-                
-                results['report_path'] = report_path
-                logger.info(f"Report generated: {report_path}")
-            
-            # Step 5: Ensemble detection (if enabled)
-            if (self.feature_manager.is_enabled('ensemble_detection') and 
-                anomalies is not None):
+            # 6. Ensemble
+            if (self.feature_manager.is_enabled('ensemble_detection')
+                    and anomalies_df is not None):
                 logger.info("Running ensemble detection...")
-                ensemble_result = self.components['ensemble'].ensemble_detect(
-                    data, anomalies
+                metrics = [c for c in ['temperature', 'heart_rate', 'activity_level']
+                           if c in data.columns]
+                ensemble_result = self.components['ensemble'].detect_anomalies(
+                    data, metrics
                 )
-                results['ensemble_result'] = ensemble_result
+                results['ensemble_result_summary'] = {
+                    'total_anomalies': int(ensemble_result['is_anomaly'].sum())
+                    if 'is_anomaly' in ensemble_result.columns else 0
+                }
                 results['features_used'].append('ensemble_detection')
-            
-            # Step 6: Notifications (if enabled)
-            if (self.feature_manager.is_enabled('notifications') and 
-                anomalies is not None and 
-                len(anomalies) > 0):
-                
+
+            # 7. Notifications
+            if (self.feature_manager.is_enabled('notifications')
+                    and results.get('anomalies')):
                 logger.info("Sending notifications...")
-                
-                # Only send email alerts if that feature is also enabled
-                if self.feature_manager.is_enabled('email_alerts'):
-                    self.components['notifications'].send_email_alert(
-                        anomalies, "Anomalies detected in livestock data"
+                alert_data = {
+                    'severity': 'high',
+                    'farm_id': 'pipeline_run',
+                    'affected_animals': len(results['anomalies']),
+                    'description': f"{len(results['anomalies'])} anomalies detected",
+                }
+                try:
+                    notify_result = self.components['notifications'].send_outbreak_alert(
+                        alert_data
                     )
-                    results['features_used'].append('email_alerts')
-                else:
-                    # Just log, don't send email
-                    self.components['notifications'].log_alert(anomalies)
-                
+                    results['notification_result'] = notify_result
+                except Exception as e:
+                    logger.warning(f"Notification failed: {e}")
+                    results['warnings'].append(f"Notification failed: {e}")
                 results['features_used'].append('notifications')
-            
-            # Step 7: Export reports (if enabled)
+
+            # 8. Export data
             if self.feature_manager.is_enabled('export_reports'):
-                logger.info("Exporting reports...")
-                export_path = self.components['exporter'].export(
-                    data, anomalies, results
-                )
-                results['export_path'] = export_path
+                logger.info("Exporting data...")
+                try:
+                    export_files = self.components['exporter'].export_dataframe(
+                        data, 'pipeline_output'
+                    )
+                    results['export_files'] = export_files
+                except Exception as e:
+                    logger.warning(f"Data export failed: {e}")
+                    results['warnings'].append(f"Data export failed: {e}")
                 results['features_used'].append('export_reports')
-            
-            # Step 8: Update dashboard (if enabled)
+
+            # 9. HTML report
+            if self.feature_manager.is_enabled('export_reports'):
+                try:
+                    from reporting.generator import get_report_generator
+                    report_gen = get_report_generator()
+                    metadata = {
+                        'Pipeline Version': '1.0',
+                        'Environment': self.env,
+                        'Total Records': len(data) if data is not None else 0,
+                    }
+                    report_path = report_gen.generate_html_report(
+                        data=data,
+                        anomalies=results.get('anomalies', []),
+                        metadata=metadata,
+                        title=f"Anomaly Detection Report - "
+                              f"{datetime.now().strftime('%Y-%m-%d')}",
+                    )
+                    results['report_path'] = report_path
+                    logger.info(f"HTML report generated: {report_path}")
+                except Exception as e:
+                    logger.warning(f"HTML report failed: {e}")
+                    results['warnings'].append(f"HTML report failed: {e}")
+
+            # 10. Dashboard
             if self.feature_manager.is_enabled('dashboard'):
-                logger.info("Updating dashboard...")
-                self.components['dashboard'].update(data, anomalies, results)
+                try:
+                    if anomalies_df is not None:
+                        html_report = self.components['dashboard'].create_summary_report(
+                            anomalies_df, results.get('anomalies', [])
+                        )
+                        report_file = self.components['dashboard'].save_report(html_report)
+                        results['dashboard_report'] = report_file
+                        logger.info(f"Dashboard report saved: {report_file}")
+                except Exception as e:
+                    logger.warning(f"Dashboard failed: {e}")
+                    results['warnings'].append(f"Dashboard failed: {e}")
                 results['features_used'].append('dashboard')
-            
+
             results['success'] = True
             logger.info("Pipeline completed successfully")
-            
+
         except FeatureDisabledError as e:
             logger.warning(f"Feature disabled: {e}")
             results['errors'].append(str(e))
         except Exception as e:
-            logger.error(f"Pipeline error: {e}")
+            logger.error(f"Pipeline error: {e}", exception=e)
             results['errors'].append(str(e))
             raise
-        
+
         return results
-    
+
     def run_with_features(self, enabled_features: Dict[str, bool]) -> Dict[str, Any]:
-        """
-        Run pipeline with temporary feature states
-        
-        Args:
-            enabled_features: Dictionary mapping feature names to boolean states
-            
-        Returns:
-            Pipeline results
-        """
-        # Store original states
-        original_states = {}
+        original_states: Dict[str, bool] = {}
         for feature_name, enabled in enabled_features.items():
             if feature_name in self.feature_manager._features:
                 original_states[feature_name] = (
                     self.feature_manager._features[feature_name].current_state
                 )
                 self.feature_manager._features[feature_name].current_state = enabled
-        
+
         try:
             results = self.run()
         finally:
-            # Restore original states
             for feature_name, state in original_states.items():
                 self.feature_manager._features[feature_name].current_state = state
-        
+
         return results
 
 
 def main():
-    """Main entry point"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description='Run livestock outbreak detection pipeline')
-    parser.add_argument('--config', default='config/settings.yaml',
-                       help='Path to configuration file')
-    parser.add_argument('--disable', nargs='+', default=[],
-                       help='Features to disable (comma-separated)')
-    parser.add_argument('--enable', nargs='+', default=[],
-                       help='Features to enable (comma-separated)')
-    parser.add_argument('--list-features', action='store_true',
-                       help='List all available features and exit')
-    
+    parser.add_argument('--config', default='config/settings.yaml')
+    parser.add_argument('--env', default=None)
+    parser.add_argument('--disable', nargs='+', default=[])
+    parser.add_argument('--enable', nargs='+', default=[])
+    parser.add_argument('--list-features', action='store_true')
+
     args = parser.parse_args()
-    
-    # Load config
-    config = load_config(args.config)
-    
-    # Get feature manager
-    feature_manager = get_feature_manager(config)
-    
-    # List features if requested
+
+    pipeline = FeatureAwarePipeline(args.config, args.env)
+    fm = pipeline.feature_manager
+
     if args.list_features:
         print("\n=== Available Features ===")
-        for name, feature in feature_manager.get_all_features().items():
-            status = "✓" if feature_manager.is_enabled(name) else "✗"
-            state = feature.state.value.upper()
-            print(f"{status} {name:30} [{state:12}] - {feature.description}")
-        print()
-        
-        # Show experimental features separately
-        experimental = feature_manager.get_features_by_category('experimental')
-        if experimental:
-            print("=== Experimental Features ===")
-            for name, feature in experimental.items():
-                status = "✓" if feature_manager.is_enabled(name) else "✗"
-                print(f"{status} {name:30} - {feature.description}")
+        for name, feature in fm.get_all_features().items():
+            status = "✓" if fm.is_enabled(name) else "✗"
+            print(f"{status} {name:30} [{feature.state.value:12}] - {feature.description}")
         return
-    
-    # Modify feature states based on CLI args
-    for feature in args.disable:
-        if feature in feature_manager._features:
-            feature_manager.disable_feature(feature)
-            print(f"Disabled feature: {feature}")
-        else:
-            print(f"Warning: Unknown feature '{feature}'")
-    
-    for feature in args.enable:
-        if feature in feature_manager._features:
-            feature_manager.enable_feature(feature)
-            print(f"Enabled feature: {feature}")
-        else:
-            print(f"Warning: Unknown feature '{feature}'")
-    
-    # Run pipeline
-    pipeline = FeatureAwarePipeline(args.config)
 
-    # Step 1.5: Data validation (if enabled)
-if self.data_validator and self.feature_manager.is_enabled('data_quality'):
-    logger.info("Validating data...")
-    
-    schema_name = self.config.get('validation', {}).get('required_schema', 'daily_health_metrics')
-    
-    validation_report = self.data_validator.validate_with_schema(schema_name, data)
-    results['validation_report'] = validation_report
-    
-    # Check if data is valid
-    if not validation_report['is_valid']:
-        if self.config.get('validation', {}).get('strict_mode', False):
-            logger.error("Data validation failed in strict mode. Aborting pipeline.")
-            results['errors'].append("Data validation failed")
-            results['success'] = False
-            return results
-        else:
-            logger.warning("Data validation failed, but continuing in non-strict mode")
-            results['warnings'].append("Data validation failed")
-    
-    # Generate quality report
-    quality_report = self.data_validator.create_data_quality_report(data, schema_name)
-    results['quality_report'] = quality_report
-    
-    logger.info(f"Data quality score: {quality_report['quality_score']:.3f}")
-    
-    results['features_used'].append('data_validation')
+    for feature in args.disable:
+        if feature in fm._features:
+            fm.disable_feature(feature)
+            print(f"Disabled feature: {feature}")
+
+    for feature in args.enable:
+        if feature in fm._features:
+            fm.enable_feature(feature)
+            print(f"Enabled feature: {feature}")
+
     pipeline.initialize_components()
-    
-    print(f"\nRunning pipeline with {len(pipeline.feature_manager.get_enabled_features())} enabled features")
+
+    print(f"\nRunning pipeline with {len(fm.get_enabled_features())} enabled features")
     results = pipeline.run()
-    
-    # Print summary
+
     if results['success']:
-        print(f"\n✅ Pipeline completed successfully!")
+        print("\n✅ Pipeline completed successfully!")
         print(f"   Features used: {', '.join(results['features_used'])}")
         if 'anomalies' in results:
             print(f"   Anomalies detected: {len(results['anomalies'])}")
+        if results.get('report_path'):
+            print(f"   HTML report: {results['report_path']}")
         if results.get('warnings'):
             print(f"   Warnings: {', '.join(results['warnings'])}")
     else:
-        print(f"\n❌ Pipeline failed")
+        print("\n❌ Pipeline failed")
         if results.get('errors'):
             print(f"   Errors: {', '.join(results['errors'])}")
 

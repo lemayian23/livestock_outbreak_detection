@@ -251,7 +251,7 @@ class ConfigManager:
         merged = copy.deepcopy(self.default_structure)
         
         # Merge in order of precedence (lowest to highest)
-        merge_order = ["base", "environment", "features", "secrets", "environment_variables"]
+        merge_order = ["base", "environment", "features", "secrets", "environment_variables", "runtime",]
         
         for section_name in merge_order:
             if section_name in self.configs:
@@ -342,25 +342,25 @@ class ConfigManager:
                 errors.append(f"Required section '{section_name}' is empty")
         
         # Validate database configuration
-        db_config = self.get("database")
-        if db_config:
-            if not db_config.get("host"):
-                errors.append("Database host is required")
-            if not db_config.get("name"):
-                errors.append("Database name is required")
+        db_config = self.get("database") or {}
+        if not db_config.get("host"):
+            errors.append("Database host is required")
+        if not db_config.get("name"):
+            errors.append("Database name is required")
         
         # Validate API configuration
-        api_config = self.get("api")
-        if api_config:
-            port = api_config.get("port")
-            if port and (port < 1 or port > 65535):
-                errors.append(f"Invalid API port: {port}")
-        
+        api_config = self.get("api") or {}
+        port = api_config.get("port")
+        if port and (port < 1 or port > 65535):
+            errors.append(f"Invalid API port: {port}")
+
         if errors:
-            error_msg = "Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+            error_msg = "Configuration validation failed:\n" + "\n".join(
+                f" - {e}" for e in errors
+            )
             logger.error(error_msg)
             raise ConfigValidationError(error_msg)
-        
+
         logger.info("Configuration validation passed")
         return True
     

@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  pipeline:
+    build: .
+    container_name: livestock_pipeline
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+      - ./config:/app/config
+    command: python run_pipeline.py
+    restart: "no"
+
+  dashboard:
+    build: .
+    container_name: livestock_dashboard
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+      - ./logs:/app/logs
+      - ./config:/app/config
+    ports:
+      - "8050:8050"
+    command: python dashboard.py
+    restart: unless-stopped
