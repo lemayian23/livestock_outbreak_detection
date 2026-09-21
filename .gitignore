@@ -5,46 +5,62 @@ __pycache__/
 *.so
 .Python
 build/
-develop-eggs/
 dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
 *.egg-info/
+.eggs/
 .installed.cfg
 *.egg
 
-# Virtual Environment
+# Virtual environments
 venv/
 env/
 ENV/
-env.bak/
-venv.bak/
+.venv/
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
+*~
 
-# Project specific
-data/backups/
-data/processed/
-data/raw/
-outputs/
-models/saved_models/
+# OS
+.DS_Store
+Thumbs.db
+
+# Project data (regenerated)
+data/raw/*
+data/processed/*
+data/backups/*
+outputs/alerts/*
+outputs/reports/*
+outputs/health_reports/*
+logs/*
+models/saved_models/*
+!**/.gitkeep
+
+# Secrets
+.env
+.env.*
+!.env.example
+config/secrets.yaml
+config/*.local.yaml
+
+# Databases
 *.db
 *.sqlite3
 
-# Environment variables
-.env
-.env.local
+# Testing / Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
 
-# Logs
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Docker
 *.log
