@@ -153,7 +153,7 @@ def detect(
         db.commit()
 
     response = DetectResponse(
-        run_id=run_id,
+        run_id=db_run.id if db_run else run_id,
         success=bool(results.get("success", False)),
         records_processed=len(df),
         anomalies_detected=len(anomalies),
