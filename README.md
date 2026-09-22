@@ -2,14 +2,15 @@
 
 > End-to-end platform that detects livestock disease outbreaks before they spread.
 
-A full-stack application that ingests farm health records, validates them against a schema, runs ensemble anomaly detection, and alerts stakeholders via dashboard, email, or API.
+A full-stack application that ingests farm health records, validates them against a schema, runs ensemble anomaly detection, and surfaces results via a web dashboard, email alerts, and a REST API.
 
 ---
 
 ## Live demo
 
-- **Frontend:** [app.yourdomain.com](https://app.yourdomain.com) *(fill in once deployed)*
-- **API docs:** [api.yourdomain.com/docs](https://api.yourdomain.com/docs) *(fill in once deployed)*
+- **Frontend:** [app.lemayian.com](https://app.lemayian.com)
+- **API docs:** [api.lemayian.com/docs](https://api.lemayian.com/docs)
+- **API health:** [api.lemayian.com/health](https://api.lemayian.com/health)
 
 ---
 
@@ -18,35 +19,49 @@ A full-stack application that ingests farm health records, validates them agains
 | Landing | Detect | Run detail |
 |---------|--------|-----------|
 | ![Landing](docs/screenshots/landing.png) | ![Detect](docs/screenshots/detect.png) | ![Run detail](docs/screenshots/run-detail.png) |
+
+---
+
+## Features
+
+- **Multi-user auth** — signup, login, JWT access tokens, httpOnly refresh cookies
+- **Ensemble anomaly detection** — Isolation Forest, statistical Z-scores, seasonal decomposition
+- **Schema validation** — Pydantic-enforced records with business rules (sick ≤ total, etc.)
+- **Data quality scoring** — completeness, accuracy, consistency, timeliness → grade A–F
+- **Persistent run history** — every detection stored, filterable, downloadable
+- **API keys** — issue/revoke keys for programmatic access
+- **Structured logging** — JSON logs with rotation, context, and performance timing
+- **Health monitoring** — pre-flight checks, system metrics, service reachability
+- **Feature toggles** — enable/disable modules per environment
+
 ---
 
 ## Architecture
 
-```
-┌────────────────────────┐
-│  Browser (Next.js)     │  app.yourdomain.com  → Vercel
-└───────────┬────────────┘
-            │ HTTPS + JWT
-            ▼
-┌────────────────────────┐
-│  FastAPI (Python)      │  api.yourdomain.com  → Render
-│  ├─ /auth              │
-│  ├─ /v1/detect         │
-│  ├─ /v1/validate       │
-│  ├─ /runs              │
-│  └─ /api-keys          │
-└───────────┬────────────┘
-            │
-            ├─────────────────────────────┐
-            ▼                             ▼
-┌────────────────────────┐      ┌────────────────────────┐
-│  Postgres (Neon)       │      │  R2 / local storage    │
-│  users, runs, anomalies│      │  HTML/CSV reports      │
-└────────────────────────┘      └────────────────────────┘
-```
+┌──────────────────────────┐
+│ Browser (Next.js 15) │ app.lemayian.com → NovaHost cPanel (Node 20)
+│ TypeScript + shadcn/ui │
+└────────────┬─────────────┘
+│ HTTPS + Bearer JWT
+▼
+┌──────────────────────────┐
+│ FastAPI (Python 3.11) │ api.lemayian.com → Render
+│ ├─ /auth/* │
+│ ├─ /v1/detect │
+│ ├─ /v1/validate │
+│ ├─ /runs/* │
+│ └─ /api-keys/* │
+└────────────┬─────────────┘
+│
+▼
+┌──────────────────────────┐
+│ PostgreSQL (Neon) │
+│ users, runs, anomalies │
+└──────────────────────────┘
+
 
 **Backend** (`src/`)
-- `api/` — FastAPI app, auth, models, routers, Alembic-ready
+- `api/` — FastAPI app, auth, SQLAlchemy models, routers
 - `anomaly_detection/` — Isolation Forest, statistical, seasonal, ensemble
 - `data_validation/` — schema enforcement + business rules
 - `data_quality/` — completeness, accuracy, consistency, timeliness
@@ -58,7 +73,7 @@ A full-stack application that ingests farm health records, validates them agains
 **Frontend** (`frontend/`)
 - Next.js 15 (App Router) + TypeScript
 - Tailwind CSS + shadcn/ui
-- Auth via Bearer JWT + httpOnly refresh cookie
+- Bearer JWT + httpOnly refresh cookie
 - Recharts for visualizations
 
 ---
@@ -71,7 +86,8 @@ A full-stack application that ingests farm health records, validates them agains
 | Backend | FastAPI, SQLAlchemy 2.0, Alembic, Pydantic v2 |
 | Database | PostgreSQL (Neon) |
 | Auth | JWT (HS256), bcrypt, httpOnly refresh cookies |
-| Deployment | Render (API), Vercel (frontend), Neon (DB) |
+| Frontend hosting | NovaHost cPanel (Node.js 20, Passenger) |
+| Backend hosting | Render |
 | CI | GitHub Actions |
 | Monitoring | Structured logs, health endpoints |
 
@@ -96,79 +112,67 @@ cp .env.example .env
 
 alembic upgrade head
 python api_main.py
-```
 
-API runs at `http://localhost:8000`. Swagger UI at `/docs`.
+API runs at http://localhost:8000. Swagger UI at /docs.
 
-### Frontend
-
-```bash
+Frontend
+bash
 cd frontend
 npm install
 cp .env.local.example .env.local
 npm run dev
-```
+App runs at http://localhost:3000.
 
-App runs at `http://localhost:3000`.
-
----
-
-## Environment variables
-
-### Backend (`.env`)
-```
+Environment variables
+Backend (.env)
+text
 DATABASE_URL=postgresql+psycopg://...
 AUTH_SECRET_KEY=<random-64-chars>
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=7
 API_KEY=<random-64-chars>
 APP_ENV=development
-```
+Generate secrets:
 
-### Frontend (`frontend/.env.local`)
-```
+bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+Frontend (frontend/.env.local for dev, .env.production for prod)
+text
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
-```
+For production:
 
----
+text
+NEXT_PUBLIC_API_BASE_URL=https://api.lemayian.com
+API surface
+Endpoint	Method	Auth	Description
+/health	GET	public	Liveness check
+/auth/signup	POST	public	Create account
+/auth/login	POST	public	Log in
+/auth/refresh	POST	cookie	Rotate access token
+/auth/me	GET	JWT	Current user
+/v1/detect	POST	JWT or API key or public	Run detection
+/v1/detect/csv	POST	any	Detection on CSV upload
+/v1/validate	POST	any	Schema validation only
+/v1/features	GET	any	List feature toggles
+/runs	GET	JWT	List user's runs
+/runs/{id}	GET	JWT	Run detail
+/runs/{id}	DELETE	JWT	Delete run
+/api-keys	GET/POST	JWT	Manage API keys
+/api-keys/{id}	DELETE	JWT	Revoke key
+Full OpenAPI spec at /openapi.json.
 
-## API surface
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/health` | GET | Liveness check |
-| `/auth/signup` | POST | Create account |
-| `/auth/login` | POST | Log in |
-| `/auth/refresh` | POST | Rotate access token |
-| `/auth/me` | GET | Current user |
-| `/v1/detect` | POST | Run detection on records |
-| `/v1/detect/csv` | POST | Run detection on uploaded CSV |
-| `/v1/validate` | POST | Schema validation only |
-| `/v1/features` | GET | Feature toggles |
-| `/runs` | GET | List user's runs |
-| `/runs/{id}` | GET | Run detail |
-| `/runs/{id}` | DELETE | Delete run |
-| `/api-keys` | GET/POST | Manage API keys |
-| `/api-keys/{id}` | DELETE | Revoke key |
-
-Full OpenAPI spec at `/openapi.json`.
-
----
-
-## Testing
-
-```bash
-pytest tests/ -v          # 93 tests
-```
-
+Testing
+bash
+pytest tests/ -v          # 96 tests
 Frontend build check:
-```bash
+
+bash
 cd frontend
 npm run build
-```
-
----
+Deployment
+See DEPLOYMENT.md for full production deployment instructions
+(NovaHost cPanel Node.js + Render + Neon).
 
 ## License
 
-MIT — see `LICENSE`.
+MIT — see [LICENSE](LICENSE).
