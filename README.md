@@ -15,12 +15,9 @@ A full-stack application that ingests farm health records, validates them agains
 
 ## Screenshots
 
-| Dashboard | Detect | Run detail |
-|-----------|--------|-----------|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Detect](docs/screenshots/detect.png) | ![Run detail](docs/screenshots/run-detail.png) |
-
-*(Drop screenshots into `docs/screenshots/` once ready.)*
-
+| Landing | Detect | Run detail |
+|---------|--------|-----------|
+| ![Landing](docs/screenshots/landing.png) | ![Detect](docs/screenshots/detect.png) | ![Run detail](docs/screenshots/run-detail.png) |
 ---
 
 ## Architecture
