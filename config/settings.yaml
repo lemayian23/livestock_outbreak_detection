@@ -9,7 +9,9 @@ api:
   workers: 1
   cors_origins:
     - "http://localhost:3000"
+    - "http://127.0.0.1:3001"
     - "http://127.0.0.1:3000"
+    - "https://app.lemayian.com"
   max_request_bytes: 10485760
   max_records_per_request: 1000
   rate_limit_per_minute: 60
