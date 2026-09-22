@@ -65,14 +65,6 @@ htmlcov/
 # Docker
 *.log
 
-# Local dev database
-local_dev.db
-*.db
-*.sqlite3
-
-# Alembic
-__pycache__/
-
 # Frontend
 frontend/node_modules/
 frontend/.next/
@@ -80,3 +72,18 @@ frontend/out/
 frontend/.env.local
 frontend/*.tsbuildinfo
 frontend/next-env.d.ts
+frontend/.turbo/
+
+# Local databases
+local_dev.db
+test_auth.db
+test.db
+*.sqlite3
+
+# Alembic
+alembic/versions/__pycache__/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
