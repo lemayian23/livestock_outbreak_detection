@@ -1,6 +1,8 @@
 """
 API route handlers.
 """
+import io
+import json as _json
 import time
 import uuid
 from datetime import datetime, timezone
@@ -12,7 +14,8 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile, status
 from custom_logging.structured_logger import get_structured_logger
 from data_validation.validator import get_data_validator
 
-from .auth import require_api_key
+from .auth.dependencies import get_optional_user
+from .database import get_db as get_db_dep
 from .dependencies import get_pipeline
 from .schemas import (
     AnomalyOut,
@@ -53,15 +56,8 @@ def health(request: Request):
     )
 
 
-# ---------- Protected endpoints ----------
+# ---------- Detection (JWT or API key, both optional) ----------
 
-@router.post(
-    "/v1/detect",
-    response_model=DetectResponse,
-    status_code=status.HTTP_200_OK,
-    tags=["detection"],
-    dependencies=[Depends(require_api_key)],
-)
 @router.post(
     "/v1/detect",
     response_model=DetectResponse,
@@ -74,13 +70,14 @@ def detect(
     db=Depends(get_db_dep),
     current_user=Depends(get_optional_user),
 ):
-    """Run the full anomaly detection pipeline on submitted records."""
-    import uuid
-    import json as _json
-    from datetime import datetime as _dt, timezone as _tz
+    """Run the full anomaly detection pipeline on submitted records.
+
+    Accepts either a bearer JWT (from the web app) or an X-API-Key header
+    (for external services). Persists the run if the caller is authenticated.
+    """
     from .models import Run, Anomaly
 
-    run_id = f"run_{_dt.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    run_id = f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
     start = time.perf_counter()
 
     logger.set_context(run_id=run_id)
@@ -106,7 +103,7 @@ def detect(
         if db_run:
             db_run.status = "failed"
             db_run.error_message = str(e)[:1000]
-            db_run.completed_at = _dt.now(_tz.utc)
+            db_run.completed_at = datetime.now(timezone.utc)
             db.commit()
         raise
 
@@ -137,20 +134,22 @@ def detect(
         db_run.anomalies_detected = len(anomalies)
         db_run.quality_score = quality_score
         db_run.duration_ms = round(duration_ms, 2)
-        db_run.completed_at = _dt.now(_tz.utc)
+        db_run.completed_at = datetime.now(timezone.utc)
         db.commit()
 
         for a in anomalies:
-            db.add(Anomaly(
-                run_id=db_run.id,
-                farm_id=a.farm_id,
-                animal_type=a.animal_type,
-                date=a.date,
-                severity=a.severity,
-                score=a.score,
-                description=a.description,
-                raw_json=_json.dumps(a.model_dump(), default=str),
-            ))
+            db.add(
+                Anomaly(
+                    run_id=db_run.id,
+                    farm_id=a.farm_id,
+                    animal_type=a.animal_type,
+                    date=a.date,
+                    severity=a.severity,
+                    score=a.score,
+                    description=a.description,
+                    raw_json=_json.dumps(a.model_dump(), default=str),
+                )
+            )
         db.commit()
 
     response = DetectResponse(
@@ -167,7 +166,9 @@ def detect(
         features_used=results.get("features_used", []) or [],
     )
 
-    logger.info(f"Completed run {run_id}: {response.anomalies_detected} anomalies")
+    logger.info(
+        f"Completed run {run_id}: {response.anomalies_detected} anomalies in {response.duration_ms}ms"
+    )
     logger.clear_context()
     return response
 
@@ -176,21 +177,19 @@ def detect(
     "/v1/detect/csv",
     response_model=DetectResponse,
     tags=["detection"],
-    dependencies=[Depends(require_api_key)],
 )
 async def detect_csv(
     file: UploadFile = File(...),
     pipeline=Depends(get_pipeline),
 ):
     """Upload a CSV file and run detection on it."""
-    run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    run_id = f"run_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
     start = time.perf_counter()
 
     logger.set_context(run_id=run_id)
     logger.info(f"Received CSV upload: {file.filename}")
 
     contents = await file.read()
-    import io
     df = pd.read_csv(io.BytesIO(contents))
 
     results = pipeline.run(input_data=df)
@@ -232,7 +231,6 @@ async def detect_csv(
     "/v1/validate",
     response_model=ValidateResponse,
     tags=["validation"],
-    dependencies=[Depends(require_api_key)],
 )
 def validate(payload: ValidateRequest):
     """Validate records against a schema without running the full pipeline."""
@@ -259,7 +257,6 @@ def validate(payload: ValidateRequest):
     "/v1/features",
     response_model=List[FeatureInfo],
     tags=["meta"],
-    dependencies=[Depends(require_api_key)],
 )
 def list_features():
     """Return current feature toggle states."""
