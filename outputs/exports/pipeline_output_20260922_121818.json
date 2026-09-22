@@ -1,0 +1,56 @@
+{
+  "metadata": {
+    "export_date": "2026-09-22T12:18:20.480921",
+    "record_count": 1,
+    "columns": [
+      "farm_id",
+      "date",
+      "animal_type",
+      "total_animals",
+      "sick_animals",
+      "deceased_animals",
+      "avg_temperature",
+      "feed_intake_percent",
+      "water_intake_percent",
+      "activity_level",
+      "location_lat",
+      "location_lon",
+      "tag_id",
+      "activity_level_normalized"
+    ],
+    "data_types": {
+      "farm_id": "object",
+      "date": "datetime64[ns]",
+      "animal_type": "object",
+      "total_animals": "float64",
+      "sick_animals": "float64",
+      "deceased_animals": "float64",
+      "avg_temperature": "float64",
+      "feed_intake_percent": "float64",
+      "water_intake_percent": "float64",
+      "activity_level": "float64",
+      "location_lat": "object",
+      "location_lon": "object",
+      "tag_id": "object",
+      "activity_level_normalized": "float64"
+    }
+  },
+  "data": [
+    {
+      "farm_id": "FARM-0001",
+      "date": "2026-09-22T00:00:00",
+      "animal_type": "cattle",
+      "total_animals": 0.0,
+      "sick_animals": 0.0,
+      "deceased_animals": 0.0,
+      "avg_temperature": 0.0,
+      "feed_intake_percent": 0.0,
+      "water_intake_percent": 0.0,
+      "activity_level": 0.1,
+      "location_lat": null,
+      "location_lon": null,
+      "tag_id": null,
+      "activity_level_normalized": 0.0
+    }
+  ]
+}

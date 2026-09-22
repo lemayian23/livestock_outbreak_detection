@@ -1,0 +1,2 @@
+farm_id,date,animal_type,total_animals,sick_animals,deceased_animals,avg_temperature,feed_intake_percent,water_intake_percent,activity_level,location_lat,location_lon,tag_id,activity_level_normalized
+FARM-0001,2026-09-22,cattle,0.0,0.0,0.0,0.0,0.0,0.0,0.1,,,,0.0
