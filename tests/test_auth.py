@@ -13,14 +13,29 @@ os.environ["AUTH_SECRET_KEY"] = "test-secret"
 os.environ["DATABASE_URL"] = "sqlite:///./test_auth.db"
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def client():
+    """Fresh TestClient per test — no cookie leakage between tests."""
     from unittest.mock import patch
     with patch("run_pipeline.FeatureAwarePipeline.initialize_components"):
         from src.api.main import app
         from fastapi.testclient import TestClient
         with TestClient(app) as c:
+            c.cookies.clear()
             yield c
+            c.cookies.clear()
+
+
+def _ensure_user(client):
+    """Create the test user if it doesn't already exist."""
+    r = client.post("/auth/signup", json={
+        "email": "user@example.com",
+        "password": "supersecret123",
+        "full_name": "Test User",
+    })
+    if r.status_code == 409:
+        pass  # already exists
+    return r
 
 
 def test_signup_and_login(client):
@@ -30,6 +45,8 @@ def test_signup_and_login(client):
         "full_name": "Test User",
     })
     assert r.status_code in (201, 409), r.text
+
+    client.cookies.clear()
 
     r = client.post("/auth/login", json={
         "email": "user@example.com",
@@ -42,11 +59,15 @@ def test_signup_and_login(client):
 
 
 def test_me_requires_auth(client):
+    client.cookies.clear()
     r = client.get("/auth/me")
     assert r.status_code == 401
 
 
 def test_me_with_token(client):
+    _ensure_user(client)
+    client.cookies.clear()
+
     login = client.post("/auth/login", json={
         "email": "user@example.com",
         "password": "supersecret123",
@@ -58,5 +79,6 @@ def test_me_with_token(client):
 
 
 def test_runs_list_requires_auth(client):
+    client.cookies.clear()
     r = client.get("/runs")
     assert r.status_code == 401

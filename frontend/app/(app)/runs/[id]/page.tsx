@@ -4,7 +4,17 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { useAuth } from "@/lib/auth";
 import * as api from "@/lib/api";
@@ -41,7 +51,7 @@ export default function RunDetailPage() {
       try {
         const r = await api.getRun(token, id);
         setRun(r);
-      } catch (err) {
+      } catch {
         toast.error("Could not load run");
         router.replace("/runs");
       } finally {
@@ -74,6 +84,12 @@ export default function RunDetailPage() {
 
   if (!run) return null;
 
+  const chartData = run.anomalies.map((a, i) => ({
+    name: a.farm_id ? a.farm_id.replace("FARM-", "") : `#${i + 1}`,
+    score: a.score ?? 0,
+    severity: (a.severity ?? "unknown").toLowerCase(),
+  }));
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -105,9 +121,52 @@ export default function RunDetailPage() {
         />
         <SummaryStat
           label="Duration"
-          value={run.duration_ms != null ? `${run.duration_ms.toFixed(0)} ms` : "—"}
+          value={
+            run.duration_ms != null ? `${run.duration_ms.toFixed(0)} ms` : "—"
+          }
         />
       </div>
+
+      {chartData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Anomaly scores</CardTitle>
+            <CardDescription>
+              Higher is worse. Red = high/critical, orange = medium, green = low.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div style={{ width: "100%", height: 260 }}>
+              <ResponsiveContainer>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip
+                    contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                    formatter={(value: number) => value.toFixed(3)}
+                  />
+                  <Bar dataKey="score" radius={[4, 4, 0, 0]}>
+                    {chartData.map((entry, idx) => (
+                      <Cell
+                        key={idx}
+                        fill={
+                          entry.severity === "critical" ||
+                          entry.severity === "high"
+                            ? "#ef4444"
+                            : entry.severity === "medium"
+                              ? "#f59e0b"
+                              : "#10b981"
+                        }
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -166,7 +225,9 @@ export default function RunDetailPage() {
           <Row label="Status">
             <Badge variant="outline">{run.status}</Badge>
           </Row>
-          <Row label="Created">{new Date(run.created_at).toLocaleString()}</Row>
+          <Row label="Created">
+            {new Date(run.created_at).toLocaleString()}
+          </Row>
           {run.completed_at && (
             <Row label="Completed">
               {new Date(run.completed_at).toLocaleString()}

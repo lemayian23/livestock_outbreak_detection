@@ -25,7 +25,9 @@ def client(_api_env):
         from src.api.main import app
         from fastapi.testclient import TestClient
         with TestClient(app) as c:
+            c.cookies.clear()
             yield c
+            c.cookies.clear()
 
 
 HEADERS = {"X-API-Key": "test-api-key"}
@@ -60,9 +62,21 @@ def test_health(client):
     assert "version" in body
 
 
-def test_detect_requires_auth(client):
-    r = client.post("/v1/detect", json={"records": SAMPLE_RECORDS})
-    assert r.status_code == 401
+def test_detect_allows_anonymous(client):
+    """Anonymous requests are accepted — run is not persisted."""
+    with patch("run_pipeline.FeatureAwarePipeline.run") as mock_run:
+        mock_run.return_value = {
+            "success": True,
+            "anomalies": [],
+            "warnings": [],
+            "errors": [],
+            "features_used": [],
+            "report_path": None,
+            "quality_report": {"quality_score": 0.9},
+        }
+        r = client.post("/v1/detect", json={"records": SAMPLE_RECORDS})
+        assert r.status_code == 200
+        assert r.json()["success"] is True
 
 
 def test_detect_invalid_payload(client):

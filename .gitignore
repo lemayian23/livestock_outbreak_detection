@@ -72,3 +72,11 @@ local_dev.db
 
 # Alembic
 __pycache__/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts

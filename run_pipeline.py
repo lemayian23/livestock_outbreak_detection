@@ -27,7 +27,6 @@ class FeatureAwarePipeline:
         self.feature_manager = get_feature_manager(self.config)
         self.components: Dict[str, Any] = {}
 
-        # Optional validator
         self.data_validator = None
         if self.config.get('validation.enabled', False):
             self.data_validator = get_data_validator(self.config)
@@ -47,52 +46,75 @@ class FeatureAwarePipeline:
 
     def initialize_components(self) -> None:
         if self.feature_manager.is_enabled('data_collection'):
-            from data_collection.ingestion import DataIngestor
-            self.components['data_ingestor'] = DataIngestor(None)
-            logger.info("Data ingestor initialized")
+            try:
+                from data_collection.ingestion import DataIngestor
+                self.components['data_ingestor'] = DataIngestor(None)
+                logger.info("Data ingestor initialized")
+            except Exception as e:
+                logger.warning(f"Could not init data_ingestor: {e}")
 
         if self.feature_manager.is_enabled('data_quality'):
-            from data_quality.analyzer import DataQualityAnalyzer
-            self.components['data_quality'] = DataQualityAnalyzer()
-            logger.info("Data quality analyzer initialized")
+            try:
+                from data_quality.analyzer import DataQualityAnalyzer
+                self.components['data_quality'] = DataQualityAnalyzer()
+                logger.info("Data quality analyzer initialized")
+            except Exception as e:
+                logger.warning(f"Could not init data_quality: {e}")
 
         if self.feature_manager.is_enabled('preprocessing'):
-            from preprocessing.cleaner import DataCleaner
-            from preprocessing.normalizer import FeatureNormalizer
-            self.components['cleaner'] = DataCleaner(self.config)
-            self.components['normalizer'] = FeatureNormalizer(method='standard')
-            logger.info("Preprocessing components initialized")
+            try:
+                from preprocessing.cleaner import DataCleaner
+                from preprocessing.normalizer import FeatureNormalizer
+                self.components['cleaner'] = DataCleaner(self.config)
+                self.components['normalizer'] = FeatureNormalizer(method='standard')
+                logger.info("Preprocessing components initialized")
+            except Exception as e:
+                logger.warning(f"Could not init preprocessing: {e}")
 
         if self.feature_manager.is_enabled('anomaly_detection'):
-            from anomaly_detection.detector import AnomalyDetector
-            self.components['detector'] = AnomalyDetector(self.config)
-            logger.info("Anomaly detector initialized")
+            try:
+                from anomaly_detection.detector import AnomalyDetector
+                self.components['detector'] = AnomalyDetector(self.config)
+                logger.info("Anomaly detector initialized")
+            except Exception as e:
+                logger.warning(f"Could not init detector: {e}")
 
         if self.feature_manager.is_enabled('ensemble_detection'):
-            from anomaly_detection.ensemble import EnsembleDetector
-            self.components['ensemble'] = EnsembleDetector()
-            logger.info("Ensemble detector initialized")
+            try:
+                from anomaly_detection.ensemble import EnsembleDetector
+                self.components['ensemble'] = EnsembleDetector()
+                logger.info("Ensemble detector initialized")
+            except Exception as e:
+                logger.warning(f"Could not init ensemble: {e}")
 
         if self.feature_manager.is_enabled('notifications'):
-            from notification.manager import NotificationManager
-            notification_config = self.config.get('notification', {}) or {}
-            self.components['notifications'] = NotificationManager(notification_config)
-            logger.info("Notification manager initialized")
+            try:
+                from notification.manager import NotificationManager
+                notification_config = self.config.get('notification', {}) or {}
+                self.components['notifications'] = NotificationManager(notification_config)
+                logger.info("Notification manager initialized")
+            except Exception as e:
+                logger.warning(f"Could not init notifications: {e}")
 
         if self.feature_manager.is_enabled('export_reports'):
-            from export.exporter import DataExporter
-            self.components['exporter'] = DataExporter()
-            logger.info("Data exporter initialized")
+            try:
+                from export.exporter import DataExporter
+                self.components['exporter'] = DataExporter()
+                logger.info("Data exporter initialized")
+            except Exception as e:
+                logger.warning(f"Could not init exporter: {e}")
 
         if self.feature_manager.is_enabled('dashboard'):
-            from visualization.dashboard import HealthDashboard
-            self.components['dashboard'] = HealthDashboard()
-            logger.info("Dashboard initialized")
+            try:
+                from visualization.dashboard import HealthDashboard
+                self.components['dashboard'] = HealthDashboard()
+                logger.info("Dashboard initialized")
+            except Exception as e:
+                logger.warning(f"Could not init dashboard: {e}")
 
     def _load_input_data(self, input_data: Optional[Any]):
         if input_data is not None:
             return input_data
-
         csv_path = "data/raw/livestock_data.csv"
         if not os.path.exists(csv_path):
             raise FileNotFoundError(
@@ -113,13 +135,13 @@ class FeatureAwarePipeline:
 
         try:
             # 1. Load
-            if self.feature_manager.is_enabled('data_collection'):
+            if input_data is not None:
+                data = input_data
+                results['features_used'].append('provided_input')
+            elif self.feature_manager.is_enabled('data_collection'):
                 logger.info("Collecting data...")
                 data = self._load_input_data(input_data)
                 results['features_used'].append('data_collection')
-            elif input_data is not None:
-                data = input_data
-                results['features_used'].append('provided_input')
             else:
                 raise FeatureDisabledError(
                     "data_collection is disabled and no input data provided"
@@ -151,8 +173,11 @@ class FeatureAwarePipeline:
                 logger.info(f"Data quality score: {quality_report['quality_score']:.3f}")
                 results['features_used'].append('data_validation')
 
-            # 3. Data quality
-            if self.feature_manager.is_enabled('data_quality'):
+            # 3. Data quality (guarded)
+            if (
+                self.feature_manager.is_enabled('data_quality')
+                and 'data_quality' in self.components
+            ):
                 logger.info("Running data quality checks...")
                 quality_analysis = self.components['data_quality'].analyze_dataframe(data)
                 results['data_quality'] = quality_analysis
@@ -162,7 +187,7 @@ class FeatureAwarePipeline:
                     )
                 results['features_used'].append('data_quality')
 
-            # 4. Preprocess
+            # 4. Preprocess (guarded)
             if self.feature_manager.is_enabled('preprocessing'):
                 logger.info("Preprocessing data...")
                 if 'cleaner' in self.components:
@@ -175,9 +200,12 @@ class FeatureAwarePipeline:
                         data = self.components['normalizer'].transform(data, metrics)
                 results['features_used'].append('preprocessing')
 
-            # 5. Anomaly detection
+            # 5. Anomaly detection (guarded)
             anomalies_df = None
-            if self.feature_manager.is_enabled('anomaly_detection'):
+            if (
+                self.feature_manager.is_enabled('anomaly_detection')
+                and 'detector' in self.components
+            ):
                 logger.info("Running anomaly detection...")
                 anomalies_df = self.components['detector'].detect(data)
                 results['features_used'].append('anomaly_detection')
@@ -186,9 +214,12 @@ class FeatureAwarePipeline:
                     results['anomalies'] = anomaly_rows.to_dict('records')
                     logger.info(f"Detected {len(anomaly_rows)} anomalies")
 
-            # 6. Ensemble
-            if (self.feature_manager.is_enabled('ensemble_detection')
-                    and anomalies_df is not None):
+            # 6. Ensemble (guarded)
+            if (
+                self.feature_manager.is_enabled('ensemble_detection')
+                and 'ensemble' in self.components
+                and anomalies_df is not None
+            ):
                 logger.info("Running ensemble detection...")
                 metrics = [c for c in ['temperature', 'heart_rate', 'activity_level']
                            if c in data.columns]
@@ -201,9 +232,12 @@ class FeatureAwarePipeline:
                 }
                 results['features_used'].append('ensemble_detection')
 
-            # 7. Notifications
-            if (self.feature_manager.is_enabled('notifications')
-                    and results.get('anomalies')):
+            # 7. Notifications (guarded)
+            if (
+                self.feature_manager.is_enabled('notifications')
+                and 'notifications' in self.components
+                and results.get('anomalies')
+            ):
                 logger.info("Sending notifications...")
                 alert_data = {
                     'severity': 'high',
@@ -221,8 +255,11 @@ class FeatureAwarePipeline:
                     results['warnings'].append(f"Notification failed: {e}")
                 results['features_used'].append('notifications')
 
-            # 8. Export data
-            if self.feature_manager.is_enabled('export_reports'):
+            # 8. Export data (guarded)
+            if (
+                self.feature_manager.is_enabled('export_reports')
+                and 'exporter' in self.components
+            ):
                 logger.info("Exporting data...")
                 try:
                     export_files = self.components['exporter'].export_dataframe(
@@ -234,7 +271,7 @@ class FeatureAwarePipeline:
                     results['warnings'].append(f"Data export failed: {e}")
                 results['features_used'].append('export_reports')
 
-            # 9. HTML report
+            # 9. HTML report (guarded)
             if self.feature_manager.is_enabled('export_reports'):
                 try:
                     from reporting.generator import get_report_generator
@@ -257,8 +294,11 @@ class FeatureAwarePipeline:
                     logger.warning(f"HTML report failed: {e}")
                     results['warnings'].append(f"HTML report failed: {e}")
 
-            # 10. Dashboard
-            if self.feature_manager.is_enabled('dashboard'):
+            # 10. Dashboard (guarded)
+            if (
+                self.feature_manager.is_enabled('dashboard')
+                and 'dashboard' in self.components
+            ):
                 try:
                     if anomalies_df is not None:
                         html_report = self.components['dashboard'].create_summary_report(
@@ -285,27 +325,9 @@ class FeatureAwarePipeline:
 
         return results
 
-    def run_with_features(self, enabled_features: Dict[str, bool]) -> Dict[str, Any]:
-        original_states: Dict[str, bool] = {}
-        for feature_name, enabled in enabled_features.items():
-            if feature_name in self.feature_manager._features:
-                original_states[feature_name] = (
-                    self.feature_manager._features[feature_name].current_state
-                )
-                self.feature_manager._features[feature_name].current_state = enabled
-
-        try:
-            results = self.run()
-        finally:
-            for feature_name, state in original_states.items():
-                self.feature_manager._features[feature_name].current_state = state
-
-        return results
-
 
 def main():
     import argparse
-
     parser = argparse.ArgumentParser(description='Run livestock outbreak detection pipeline')
     parser.add_argument('--config', default='config/settings.yaml')
     parser.add_argument('--env', default=None)
@@ -314,7 +336,6 @@ def main():
     parser.add_argument('--list-features', action='store_true')
 
     args = parser.parse_args()
-
     pipeline = FeatureAwarePipeline(args.config, args.env)
     fm = pipeline.feature_manager
 
@@ -336,7 +357,6 @@ def main():
             print(f"Enabled feature: {feature}")
 
     pipeline.initialize_components()
-
     print(f"\nRunning pipeline with {len(fm.get_enabled_features())} enabled features")
     results = pipeline.run()
 
