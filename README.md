@@ -38,27 +38,39 @@ A full-stack application that ingests farm health records, validates them agains
 
 ## Architecture
 
-┌──────────────────────────┐
-│ Browser (Next.js 15) │ app.lemayian.com → NovaHost cPanel (Node 20)
-│ TypeScript + shadcn/ui │
-└────────────┬─────────────┘
-│ HTTPS + Bearer JWT
-▼
-┌──────────────────────────┐
-│ FastAPI (Python 3.11) │ api.lemayian.com → Render
-│ ├─ /auth/* │
-│ ├─ /v1/detect │
-│ ├─ /v1/validate │
-│ ├─ /runs/* │
-│ └─ /api-keys/* │
-└────────────┬─────────────┘
-│
-▼
-┌──────────────────────────┐
-│ PostgreSQL (Neon) │
-│ users, runs, anomalies │
-└──────────────────────────┘
-
+```
+┌──────────────────────────────────────────────────────────────┐
+│                       End User (Browser)                     │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                               │ HTTPS + JWT
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  Frontend — Next.js 15                       │
+│                  https://app.lemayian.com                    │
+│                  Hosted on: NovaHost cPanel (Node.js 20)     │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                               │ REST API (Bearer JWT)
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  Backend — FastAPI (Python 3.11)             │
+│                  https://api.lemayian.com                    │
+│                  Hosted on: Render                           │
+│                                                              │
+│   /auth/*    /v1/detect    /v1/validate                      │
+│   /runs/*    /api-keys/*   /health                           │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+                               │ SQLAlchemy / psycopg3
+                               ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  Database — PostgreSQL                       │
+│                  Hosted on: Neon (free tier)                 │
+│                                                              │
+│   users    runs    anomalies    api_keys                     │
+└──────────────────────────────────────────────────────────────┘
+```
 
 **Backend** (`src/`)
 - `api/` — FastAPI app, auth, SQLAlchemy models, routers
@@ -75,7 +87,6 @@ A full-stack application that ingests farm health records, validates them agains
 - Tailwind CSS + shadcn/ui
 - Bearer JWT + httpOnly refresh cookie
 - Recharts for visualizations
-
 ---
 
 ## Tech stack
