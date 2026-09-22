@@ -221,8 +221,9 @@ class TestSecretsManager:
 class TestEnvironmentManager:
     @patch('socket.gethostname')
     @patch.dict(os.environ, {})
-    def test_detect_environment(self, mock_gethostname):
+    def test_detect_environment(self, mock_gethostname, monkeypatch):
         """Test environment detection"""
+        monkeypatch.delenv("APP_ENV", raising=False)
         mock_gethostname.return_value = "localhost"
         
         manager = EnvironmentManager()
